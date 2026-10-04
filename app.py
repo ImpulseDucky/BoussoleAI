@@ -225,7 +225,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                     🎯 ATS Matcher
                 </button>
                 <button onclick="switchView('copilot')" id="btn-copilot" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm">
-                    🏛️ Financial Aid
+                    🏛️️ Financial Aid
                 </button>
                 <button onclick="switchView('bridge')" id="btn-bridge" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 transition shadow-sm">
                     🌉 Grant-to-Career
@@ -282,6 +282,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                             <div class="ai-markdown-body">Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?</div>
                             <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80 text-[11px]">
                                 <button onclick="copyToClipboard(this, 'Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">📋 Copy</button>
+                                <button data-speak-btn onclick="speakText(this, 'Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">🔊 Speak</button>
                             </div>
                         </div>
                     </div>
@@ -740,6 +741,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
         async function resetChat() {
             if (!confirm("Are you sure you want to reset the conversation?")) return;
+            window.speechSynthesis.cancel();
             await fetch('/api/clear', { method: 'POST' });
             fullConversationLog = [];
             document.getElementById('chat-stream').innerHTML = `
@@ -749,6 +751,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                         <div class="ai-markdown-body">Chat reset successfully. How can I help you navigate your professional trajectory today?</div>
                         <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80 text-[11px]">
                             <button onclick="copyToClipboard(this, 'Chat reset successfully. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">📋 Copy</button>
+                            <button data-speak-btn onclick="speakText(this, 'Chat reset successfully. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">🔊 Speak</button>
                         </div>
                     </div>
                 </div>`;
@@ -765,6 +768,59 @@ UNIFIED_HTML_TEMPLATE = r"""
             }).catch(err => {
                 console.error('Failed to copy text: ', err);
             });
+        }
+
+        // Text-to-Speech Voice Output Utilities
+        function stripMarkdownForSpeech(text) {
+            return text
+                .replace(/```[\s\S]*?```/g, 'code block omitted')
+                .replace(/`([^`]+)`/g, '$1')
+                .replace(/#{1,6}\s+/g, '')
+                .replace(/\*\*([^*]+)\*\*/g, '$1')
+                .replace(/\*([^*]+)\*/g, '$1')
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+                .replace(/>\s+/g, '');
+        }
+
+        function speakText(buttonElement, textToSpeak) {
+            if (!('speechSynthesis' in window)) {
+                alert("Text-to-speech is not supported in your browser.");
+                return;
+            }
+
+            window.speechSynthesis.cancel();
+
+            if (buttonElement.dataset.speaking === 'true') {
+                buttonElement.dataset.speaking = 'false';
+                buttonElement.innerHTML = '🔊 Speak';
+                return;
+            }
+
+            document.querySelectorAll('[data-speak-btn]').forEach(btn => {
+                btn.dataset.speaking = 'false';
+                btn.innerHTML = '🔊 Speak';
+            });
+
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+
+            utterance.onstart = () => {
+                buttonElement.dataset.speaking = 'true';
+                buttonElement.innerHTML = '⏹️ Stop';
+            };
+
+            utterance.onend = () => {
+                buttonElement.dataset.speaking = 'false';
+                buttonElement.innerHTML = '🔊 Speak';
+            };
+
+            utterance.onerror = () => {
+                buttonElement.dataset.speaking = 'false';
+                buttonElement.innerHTML = '🔊 Speak';
+            };
+
+            window.speechSynthesis.speak(utterance);
         }
 
         // Career Coach Chat & Smart Playbooks Logic
@@ -844,6 +900,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 if (data.reply) {
                     fullConversationLog.push(`**User:** ${text}\n\n**Boussole AI:** ${data.reply}`);
                     const rawReplyForCopy = data.reply.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                    const cleanReplyForSpeech = stripMarkdownForSpeech(data.reply).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
                     chatStream.innerHTML += `
                         <div class="flex items-start gap-3 w-full">
                             <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold flex-shrink-0">B</div>
@@ -851,6 +908,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                                 <div class="ai-markdown-body">${marked.parse(data.reply)}</div>
                                 <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80 text-[11px]">
                                     <button onclick="copyToClipboard(this, '${rawReplyForCopy}')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">📋 Copy</button>
+                                    <button data-speak-btn onclick="speakText(this, '${cleanReplyForSpeech}')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">🔊 Speak</button>
                                 </div>
                             </div>
                         </div>`;
