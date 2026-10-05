@@ -225,7 +225,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                     🎯 ATS Matcher
                 </button>
                 <button onclick="switchView('copilot')" id="btn-copilot" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm">
-                    🏛️️ Financial Aid
+                    🏛 Financial Aid
                 </button>
                 <button onclick="switchView('bridge')" id="btn-bridge" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 transition shadow-sm">
                     🌉 Grant-to-Career
@@ -307,21 +307,21 @@ UNIFIED_HTML_TEMPLATE = r"""
             </section>
         </div>
 
-        <!-- VIEW 2: ATS RESUME MATCHING PAGE -->
+        <!-- VIEW 2: ATS MULTI-JOB COMPARISON & HISTORY PAGE -->
         <div id="view-ats" class="hidden flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar p-1">
             <div class="glass-panel rounded-2xl p-6 flex flex-col gap-5 max-w-5xl mx-auto w-full">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-lg">🎯</div>
                     <div>
-                        <h2 class="text-base font-bold text-white">ATS Resume & Job Compatibility Engine</h2>
-                        <p class="text-xs text-slate-400">Upload your CV and paste a target job description to calculate your ATS match score and discover missing keywords.</p>
+                        <h2 class="text-base font-bold text-white">Multi-Role ATS Compatibility & History Dashboard</h2>
+                        <p class="text-xs text-slate-400">Compare up to 10 roles simultaneously (descriptions optional). Use AI job recommendations based on your CV!</p>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Column A: Inputs -->
                     <div class="flex flex-col gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
-                        <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">1. Provide CV & Job Details</h3>
+                        <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">1. CV & Target Roles</h3>
                         
                         <div class="flex flex-col gap-1.5">
                             <label class="text-xs font-semibold text-slate-300">Upload CV (PDF or TXT):</label>
@@ -332,70 +332,48 @@ UNIFIED_HTML_TEMPLATE = r"""
                         </div>
 
                         <div class="flex flex-col gap-1.5">
-                            <label class="text-xs font-semibold text-slate-350">Or Paste CV Text Content:</label>
-                            <textarea id="ats-cv-text" rows="5" class="w-full bg-slate-950 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none" placeholder="Paste your resume text here..."></textarea>
+                            <label class="text-xs font-semibold text-slate-300">Or Paste CV Text Content:</label>
+                            <textarea id="ats-cv-text" rows="4" class="w-full bg-slate-950 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none" placeholder="Paste your resume text here..."></textarea>
                         </div>
 
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-xs font-semibold text-slate-350">Target Job Title & Description:</label>
-                            <textarea id="ats-job-desc" rows="5" class="w-full bg-slate-950 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none" placeholder="Paste the target job description or title here..."></textarea>
+                        <!-- AI Job Recommendation Button -->
+                        <button onclick="recommendJobs()" id="recommend-jobs-btn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-700/50 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
+                            ✨ AI: Recommend Top Roles for My CV
+                        </button>
+
+                        <!-- Multiple Job Inputs List -->
+                        <div class="flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-semibold text-slate-300">Target Jobs (Up to 10 roles):</label>
+                                <button onclick="addJobInputBox()" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold">+ Add Role</button>
+                            </div>
+                            <div id="job-inputs-list" class="flex flex-col gap-2">
+                                <div class="job-input-item flex flex-col gap-1.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800">
+                                    <input type="text" placeholder="Job Title (e.g. AI Software Engineer)" class="job-title-input w-full bg-slate-900 text-slate-100 text-xs rounded px-2.5 py-1.5 border border-slate-800 focus:outline-none focus:border-indigo-500">
+                                    <textarea rows="2" placeholder="Paste job description here (optional)..." class="job-desc-input w-full bg-slate-900 text-slate-200 text-xs rounded p-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none"></textarea>
+                                </div>
+                            </div>
                         </div>
 
                         <button onclick="runAtsMatch()" id="ats-submit-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-indigo-600/20">
-                            Calculate ATS Compatibility Score ⚡
+                            Calculate Multi-Job ATS Compatibility ⚡
                         </button>
                     </div>
 
-                    <!-- Column B: Results & Score Analysis -->
-                    <div class="flex flex-col gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800 overflow-y-auto custom-scrollbar">
-                        <h3 class="text-xs font-bold text-cyan-400 uppercase tracking-wider">2. Compatibility Breakdown</h3>
+                    <!-- Column B: History & Results Feed (Retains past analyses) -->
+                    <div class="flex flex-col gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800 overflow-y-auto custom-scrollbar max-h-[600px] md:max-h-none">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-xs font-bold text-cyan-400 uppercase tracking-wider">2. Compatibility History Feed</h3>
+                            <button onclick="clearAtsHistory()" class="text-[10px] text-slate-400 hover:text-rose-400 transition">Clear History</button>
+                        </div>
                         
                         <div id="ats-placeholder-state" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 text-xs gap-2 min-h-[280px]">
                             <span class="text-3xl">📊</span>
-                            <p>Awaiting CV and job description input.<br>Click calculate to run AI ATS analysis.</p>
+                            <p>Awaiting CV and job input.<br>Past runs accumulate here so you can track improvements.</p>
                         </div>
 
-                        <div id="ats-results-state" class="hidden flex flex-col gap-4">
-                            <!-- Score Banner -->
-                            <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-                                <div>
-                                    <span class="text-xs text-slate-400">Overall ATS Score:</span>
-                                    <h4 id="ats-score-title" class="text-lg font-bold text-white">Analyzing...</h4>
-                                </div>
-                                <div id="ats-score-badge" class="w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center font-bold text-xl">
-                                    0%
-                                </div>
-                            </div>
-
-                            <!-- Summary -->
-                            <div class="flex flex-col gap-1">
-                                <span class="text-[11px] font-bold text-slate-400 uppercase">Match Summary</span>
-                                <p id="ats-summary-text" class="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-800">—</p>
-                            </div>
-
-                            <!-- Matched Keywords -->
-                            <div class="flex flex-col gap-1.5">
-                                <span class="text-[11px] font-bold text-emerald-400 uppercase">✓ Matched Keywords & Skills</span>
-                                <div id="ats-matched-tags" class="flex flex-wrap gap-1.5 bg-slate-950 p-3 rounded-lg border border-slate-800 min-h-[44px]">
-                                    <span class="text-xs text-slate-500 italic">None identified</span>
-                                </div>
-                            </div>
-
-                            <!-- Missing Keywords -->
-                            <div class="flex flex-col gap-1.5">
-                                <span class="text-[11px] font-bold text-rose-400 uppercase">⚠️ Missing Keywords / Gaps</span>
-                                <div id="ats-missing-tags" class="flex flex-wrap gap-1.5 bg-slate-950 p-3 rounded-lg border border-slate-800 min-h-[44px]">
-                                    <span class="text-xs text-slate-500 italic">None identified</span>
-                                </div>
-                            </div>
-
-                            <!-- Recommendations -->
-                            <div class="flex flex-col gap-1.5">
-                                <span class="text-[11px] font-bold text-cyan-400 uppercase">💡 Actionable Optimization Steps</span>
-                                <ul id="ats-recommendations-list" class="text-xs text-slate-200 space-y-1.5 bg-slate-950 p-3 rounded-lg border border-slate-800 pl-4 list-disc">
-                                    <li>Awaiting analysis...</li>
-                                </ul>
-                            </div>
+                        <div id="ats-history-container" class="flex flex-col gap-4">
+                            <!-- Dynamic comparison batches injected here without deleting old ones -->
                         </div>
                     </div>
                 </div>
@@ -621,7 +599,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 if (sidebarActions) sidebarActions.classList.remove('hidden');
             } else if (mode === 'ats') {
                 atsView.classList.remove('hidden');
-                brandSubtitle.innerText = 'ATS Resume & Job Compatibility Engine';
+                brandSubtitle.innerText = 'Multi-Role ATS Compatibility & History';
                 btnAts.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-600 text-white transition shadow-sm";
                 if (sidebarActions) sidebarActions.classList.add('hidden');
             } else if (mode === 'copilot') {
@@ -650,81 +628,195 @@ UNIFIED_HTML_TEMPLATE = r"""
             }
         }
 
+        function addJobInputBox() {
+            const list = document.getElementById('job-inputs-list');
+            if (list.children.length >= 10) {
+                return alert("You can compare up to 10 roles simultaneously.");
+            }
+            const div = document.createElement('div');
+            div.className = "job-input-item flex flex-col gap-1.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800";
+            div.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <input type="text" placeholder="Job Title (e.g. Data Scientist)" class="job-title-input w-full bg-slate-900 text-slate-100 text-xs rounded px-2.5 py-1.5 border border-slate-800 focus:outline-none focus:border-indigo-500">
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-rose-400 hover:text-rose-300 text-xs px-2 font-bold" title="Remove role">✕</button>
+                </div>
+                <textarea rows="2" placeholder="Paste job description here (optional)..." class="job-desc-input w-full bg-slate-900 text-slate-200 text-xs rounded p-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none"></textarea>
+            `;
+            list.appendChild(div);
+        }
+
+        async function recommendJobs() {
+            const cvText = document.getElementById('ats-cv-text').value.trim();
+            if (!cvText) {
+                return alert("Please upload or paste your CV text first so Boussole AI can analyze your background.");
+            }
+
+            const btn = document.getElementById('recommend-jobs-btn');
+            btn.disabled = true;
+            btn.innerText = "✨ Analyzing CV & Recommending Roles...";
+
+            try {
+                const res = await fetch('/api/recommend_jobs', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ cv_text: cvText })
+                });
+                const data = await res.json();
+
+                if (data.recommended_jobs && data.recommended_jobs.length > 0) {
+                    const list = document.getElementById('job-inputs-list');
+                    list.innerHTML = ''; // Clear existing input boxes
+                    data.recommended_jobs.forEach(job => {
+                        const div = document.createElement('div');
+                        div.className = "job-input-item flex flex-col gap-1.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800";
+                        div.innerHTML = `
+                            <div class="flex justify-between items-center">
+                                <input type="text" value="${job.job_title}" placeholder="Job Title" class="job-title-input w-full bg-slate-900 text-slate-100 text-xs rounded px-2.5 py-1.5 border border-slate-800 focus:outline-none focus:border-indigo-500">
+                                <button onclick="this.parentElement.parentElement.remove()" class="text-rose-400 hover:text-rose-300 text-xs px-2 font-bold" title="Remove role">✕</button>
+                            </div>
+                            <textarea rows="2" class="job-desc-input w-full bg-slate-900 text-slate-200 text-xs rounded p-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none">${job.job_description}</textarea>
+                        `;
+                        list.appendChild(div);
+                    });
+                    runAtsMatch(); // Automatically calculate scores for recommended jobs!
+                }
+            } catch (err) {
+                alert("Error recommending jobs. Please try again.");
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "✨ AI: Recommend Top Roles for My CV";
+            }
+        }
+
+        function clearAtsHistory() {
+            document.getElementById('ats-history-container').innerHTML = '';
+            document.getElementById('ats-placeholder-state').classList.remove('hidden');
+        }
+
+        function toggleDropdown(headerEl) {
+            const content = headerEl.nextElementSibling;
+            const arrow = headerEl.querySelector('.dropdown-arrow');
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                if (arrow) arrow.style.transform = 'rotate(180deg)';
+            } else {
+                content.classList.add('hidden');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+
         async function runAtsMatch() {
             const cvText = document.getElementById('ats-cv-text').value.trim();
-            const jobDesc = document.getElementById('ats-job-desc').value.trim();
+            const items = document.querySelectorAll('.job-input-item');
+            
+            let jobEntries = [];
+            items.forEach(item => {
+                const title = item.querySelector('.job-title-input').value.trim();
+                const desc = item.querySelector('.job-desc-input').value.trim();
+                if (title) {
+                    jobEntries.push({ 
+                        title: title, 
+                        desc: desc || "No specific job description provided. Evaluate based on standard industry expectations for this job title." 
+                    });
+                }
+            });
 
-            if (!cvText || !jobDesc) {
-                return alert("Please provide both your CV text (or upload a file) and a target job title/description.");
+            if (!cvText || jobEntries.length === 0) {
+                return alert("Please provide your CV text (or upload a file) and at least one job title.");
             }
 
             const btn = document.getElementById('ats-submit-btn');
             btn.disabled = true;
-            btn.innerText = "Analyzing Compatibility...";
+            btn.innerText = "Analyzing Multiple Roles...";
 
             try {
                 const res = await fetch('/api/ats_match', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ cv_text: cvText, job_desc: jobDesc })
+                    body: JSON.stringify({ cv_text: cvText, jobs: jobEntries })
                 });
                 const data = await res.json();
                 
                 document.getElementById('ats-placeholder-state').classList.add('hidden');
-                document.getElementById('ats-results-state').classList.remove('hidden');
+                const historyContainer = document.getElementById('ats-history-container');
 
-                const score = data.score || 0;
-                document.getElementById('ats-score-badge').innerText = `${score}%`;
-                document.getElementById('ats-score-title').innerText = score >= 75 ? "High ATS Compatibility" : score >= 50 ? "Moderate Compatibility" : "Low Match / Needs Optimization";
-                document.getElementById('ats-summary-text').innerText = data.match_summary || "No summary provided.";
+                // Create a comparison batch card and prepend so history is accumulated (not deleted)
+                const batchDiv = document.createElement('div');
+                batchDiv.className = "flex flex-col gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 shadow-sm";
+                
+                const timestamp = new Date().toLocaleTimeString();
+                let htmlContent = `<div class="flex justify-between items-center text-[11px] text-slate-400 border-b border-slate-800 pb-2">
+                    <span>⚡ Analysis Batch (${jobEntries.length} roles compared)</span>
+                    <span class="font-mono">${timestamp}</span>
+                </div><div class="flex flex-col gap-2.5">`;
 
-                // Render matched tags
-                const matchedContainer = document.getElementById('ats-matched-tags');
-                matchedContainer.innerHTML = '';
-                if (data.matched_keywords && data.matched_keywords.length > 0) {
-                    data.matched_keywords.forEach(kw => {
-                        const span = document.createElement('span');
-                        span.className = "px-2 py-1 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 text-[11px] font-mono";
-                        span.innerText = kw;
-                        matchedContainer.appendChild(span);
+                if (data.results && Array.isArray(data.results)) {
+                    data.results.forEach((result, idx) => {
+                        const score = result.score || 0;
+                        const badgeColor = score >= 75 ? "emerald" : score >= 50 ? "cyan" : "rose";
+                        const roleTitle = result.job_title || jobEntries[idx]?.title || `Role ${idx+1}`;
+                        
+                        let matchedHtml = result.matched_keywords?.length ? result.matched_keywords.map(kw => `<span class="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 text-[10px] font-mono">${kw}</span>`).join('') : '<span class="text-xs text-slate-500 italic">None</span>';
+                        
+                        let missingHtml = result.missing_keywords?.length ? result.missing_keywords.map(kw => `<span class="px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800 text-[10px] font-mono">${kw}</span>`).join('') : '<span class="text-xs text-slate-500 italic">None</span>';
+
+                        let recsHtml = result.recommendations?.length ? result.recommendations.map(r => `<li>${r}</li>`).join('') : '<li>No recommendations.</li>';
+
+                        htmlContent += `
+                            <div class="rounded-lg bg-slate-900 border border-slate-800 overflow-hidden">
+                                <!-- Accordion Header -->
+                                <div onclick="toggleDropdown(this)" class="cursor-pointer p-3 flex items-center justify-between hover:bg-slate-850 transition">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-xl bg-${badgeColor}-600/20 text-${badgeColor}-400 border border-${badgeColor}-500/40 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                            ${score}%
+                                        </div>
+                                        <div>
+                                            <h4 class="text-xs font-bold text-white">${roleTitle}</h4>
+                                            <p class="text-[11px] text-slate-400 truncate max-w-[220px] sm:max-w-md">${result.match_summary || 'Click to view in-depth analysis'}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 font-semibold flex items-center gap-1">
+                                            Details <span class="dropdown-arrow transition-transform inline-block">▼</span>
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Accordion Dropdown Content -->
+                                <div class="hidden p-3 pt-0 border-t border-slate-800/80 flex flex-col gap-2.5 text-xs bg-slate-950/60 mt-2">
+                                    <div class="pt-2">
+                                        <span class="text-[10px] font-bold text-slate-400 uppercase">Match Summary</span>
+                                        <p class="text-slate-300 mt-0.5">${result.match_summary}</p>
+                                    </div>
+                                    <div>
+                                        <span class="text-[10px] font-bold text-emerald-400 uppercase">✓ Matched Keywords</span>
+                                        <div class="flex flex-wrap gap-1 mt-1">${matchedHtml}</div>
+                                    </div>
+                                    <div>
+                                        <span class="text-[10px] font-bold text-rose-400 uppercase">⚠️ Missing Keywords / Gaps</span>
+                                        <div class="flex flex-wrap gap-1 mt-1">${missingHtml}</div>
+                                    </div>
+                                    <div>
+                                        <span class="text-[10px] font-bold text-cyan-400 uppercase">💡 Actionable Optimization Steps</span>
+                                        <ul class="list-disc pl-4 space-y-1 text-slate-200 mt-1">${recsHtml}</ul>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
                     });
-                } else {
-                    matchedContainer.innerHTML = '<span class="text-xs text-slate-500 italic">No strong keyword matches found.</span>';
                 }
 
-                // Render missing tags
-                const missingContainer = document.getElementById('ats-missing-tags');
-                missingContainer.innerHTML = '';
-                if (data.missing_keywords && data.missing_keywords.length > 0) {
-                    data.missing_keywords.forEach(kw => {
-                        const span = document.createElement('span');
-                        span.className = "px-2 py-1 rounded bg-rose-950/80 text-rose-300 border border-rose-800 text-[11px] font-mono";
-                        span.innerText = kw;
-                        missingContainer.appendChild(span);
-                    });
-                } else {
-                    missingContainer.innerHTML = '<span class="text-xs text-slate-500 italic">No critical missing keywords! Great job.</span>';
-                }
-
-                // Render recommendations
-                const recList = document.getElementById('ats-recommendations-list');
-                recList.innerHTML = '';
-                if (data.recommendations && data.recommendations.length > 0) {
-                    data.recommendations.forEach(rec => {
-                        const li = document.createElement('li');
-                        li.innerText = rec;
-                        recList.appendChild(li);
-                    });
-                } else {
-                    recList.innerHTML = '<li>No specific recommendations returned.</li>';
-                }
+                htmlContent += `</div>`;
+                batchDiv.innerHTML = htmlContent;
+                historyContainer.prepend(batchDiv);
 
             } catch (err) {
-                alert("Error running ATS analysis. Please try again.");
+                alert("Error running multi-job ATS analysis.");
                 console.error(err);
             } finally {
                 btn.disabled = false;
-                btn.innerText = "Calculate ATS Compatibility Score ⚡";
+                btn.innerText = "Calculate Multi-Job ATS Compatibility ⚡";
             }
         }
 
@@ -807,7 +899,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
             utterance.onstart = () => {
                 buttonElement.dataset.speaking = 'true';
-                buttonElement.innerHTML = '⏹️ Stop';
+                buttonElement.innerHTML = '⏹️️ Stop';
             };
 
             utterance.onend = () => {
@@ -1156,31 +1248,63 @@ def evaluate_case():
         'audit': audit_result
     })
 
+@app.route('/api/recommend_jobs', methods=['POST'])
+def recommend_jobs():
+    data = request.json
+    cv_text = data.get('cv_text', '').strip()
+
+    if not cv_text:
+        return jsonify({'error': 'CV text is required.'}), 400
+
+    prompt = f"""
+    You are an elite career strategist. Analyze the candidate's CV and recommend 5 top-tier, highly suitable career roles/job titles that match their skills, background, and experience level.
+    
+    Candidate CV:
+    {cv_text}
+    
+    Provide your response in strict JSON format with a single key "recommended_jobs" containing an array of 5 objects, each having:
+    - "job_title": string
+    - "job_description": string (a concise summary of core job expectations or description for this role)
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model=deployment_name,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        result_json = response.choices[0].message.content
+        parsed = json.loads(result_json)
+        return jsonify(parsed)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/ats_match', methods=['POST'])
 def ats_match():
     data = request.json
     cv_text = data.get('cv_text', '').strip()
-    job_desc = data.get('job_desc', '').strip()
+    jobs = data.get('jobs', [])
 
-    if not cv_text or not job_desc:
-        return jsonify({'error': 'Both CV text and job description are required.'}), 400
+    if not cv_text or not jobs:
+        return jsonify({'error': 'CV text and at least one target job title are required.'}), 400
 
     prompt = f"""
     You are an expert ATS (Applicant Tracking System) recruiter and resume optimization engine.
-    Analyze the candidate's CV against the target Job Description/Title.
-    
-    Target Job Description / Title:
-    {job_desc}
+    Analyze the candidate's CV against each of the target jobs provided below. Note that for some jobs, a formal description might be missing or minimal; in those cases, evaluate based on standard industry expectations and core skill requirements for the specified job title.
     
     Candidate CV Content:
     {cv_text}
     
-    Provide your response in strict JSON format with the following keys:
+    Target Jobs:
+    {json.dumps(jobs)}
+    
+    Provide your response in strict JSON format with a single key "results" containing an array of objects. Each object must correspond to a job in order and have:
+    - "job_title": string (the title provided or inferred)
     - "score": integer between 0 and 100 representing the ATS match percentage.
-    - "match_summary": short executive summary of why it matches or doesn't match the target role.
-    - "matched_keywords": list of string keywords/skills found in both the CV and job description.
-    - "missing_keywords": list of key technical or domain terms requested in the job description but missing from the CV.
-    - "recommendations": list of 3-4 specific, actionable bullet points to improve the resume score.
+    - "match_summary": short executive summary of why it matches or doesn't match the role.
+    - "matched_keywords": list of string keywords/skills found in both the CV and job expectations.
+    - "missing_keywords": list of key technical or domain terms expected for this role but missing from the CV.
+    - "recommendations": list of 3-4 specific, actionable bullet points to improve the resume score for this role.
     """
 
     try:
