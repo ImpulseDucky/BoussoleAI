@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from openai import OpenAI
 from pypdf import PdfReader
 
@@ -16,6 +16,7 @@ load_dotenv(env_path)
 endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
 api_key = os.environ.get('AZURE_OPENAI_API_KEY')
 deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-5-mini')
+APP_PASSWORD = os.environ.get('APP_PASSWORD', 'boussole2026')
 
 if not endpoint or not api_key:
     raise RuntimeError(
@@ -154,8 +155,62 @@ def evaluate_student_eligibility(income: float, members: int) -> dict:
         }
 
 # ==============================================================================
-# 2. UNIFIED FRONTEND
+# 2. LOGIN & UNIFIED FRONTEND TEMPLATES
 # ==============================================================================
+
+LOGIN_HTML_TEMPLATE = r"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boussole AI — Protected Access</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4 selection:bg-cyan-500 selection:text-white">
+    <div class="glass-panel bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full flex flex-col gap-6">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-white">Boussole <span class="text-cyan-400">AI</span></h1>
+                <p class="text-xs text-slate-400">Restricted Access Portal</p>
+            </div>
+        </div>
+        <form id="login-form" onsubmit="handleLogin(event)" class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Enter Access Password:</label>
+                <input type="password" id="password-input" class="w-full bg-slate-950 text-slate-100 text-sm rounded-xl px-4 py-3 border border-slate-800 focus:outline-none focus:border-cyan-500" placeholder="Password..." required>
+            </div>
+            <div id="error-msg" class="text-xs text-rose-400 hidden"></div>
+            <button type="submit" class="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-cyan-600/20">Unlock Portal</button>
+        </form>
+    </div>
+    <script>
+        async function handleLogin(e) {
+            e.preventDefault();
+            const password = document.getElementById('password-input').value;
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ password })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                window.location.href = '/';
+            } else {
+                const errEl = document.getElementById('error-msg');
+                errEl.innerText = data.message || 'Incorrect password.';
+                errEl.classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
+"""
 
 UNIFIED_HTML_TEMPLATE = r"""
 <!DOCTYPE html>
@@ -212,54 +267,75 @@ UNIFIED_HTML_TEMPLATE = r"""
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 h-[100dvh] flex flex-col justify-between selection:bg-cyan-500 selection:text-white overflow-hidden" onload="initApp()">
+<body class="bg-slate-950 text-slate-100 min-h-[100dvh] flex flex-col justify-between selection:bg-cyan-500 selection:text-white overflow-y-auto md:overflow-hidden" onload="initApp()">
 
     <!-- Top Navigation Bar -->
     <header class="border-b border-slate-800 bg-slate-900 sticky top-0 z-50 flex-shrink-0">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+                <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
+                    <svg class="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
                 </div>
-                <div>
-                    <h1 class="font-bold text-base sm:text-lg text-white tracking-tight leading-none">Boussole <span class="text-cyan-400 font-normal">AI</span></h1>
-                    <div class="flex items-center gap-2 mt-0.5">
-                        <p class="text-[10px] sm:text-[11px] text-slate-400 tracking-wide" id="brand-subtitle">Career Intelligence & Roadmapping</p>
-                        <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 border border-slate-700 font-mono">⚡ gpt-5-mini</span>
+                <div class="min-w-0">
+                    <h1 class="font-bold text-sm sm:text-lg text-white tracking-tight leading-none truncate">Boussole <span class="text-cyan-400 font-normal">AI</span></h1>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <p class="text-[9px] sm:text-[11px] text-slate-400 tracking-wide truncate" id="brand-subtitle" data-i18n="brand_subtitle_career">Career Intelligence & Roadmapping</p>
+                        <span class="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 border border-slate-700 font-mono">⚡ gpt-5-mini</span>
                     </div>
                 </div>
             </div>
             
-            <div class="flex items-center gap-2 flex-wrap">
-                <button onclick="switchView('career')" id="btn-career" class="text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm">
-                    💼 Career Coach
-                </button>
-                <button onclick="switchView('job')" id="btn-job" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm">
-                    🎯 Job Matcher
-                </button>
-                <button onclick="switchView('copilot')" id="btn-copilot" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm">
-                    🏛 Financial Aid
-                </button>
-                <button onclick="switchView('bridge')" id="btn-bridge" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 transition shadow-sm">
-                    🌉 Grant-to-Career
-                </button>
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                <!-- Mobile View Switcher Dropdown (Visible only on small screens < md) -->
+                <select id="mobile-view-select" onchange="switchView(this.value)" class="md:hidden text-xs font-semibold px-2 py-2 rounded-xl bg-slate-800 text-cyan-300 border border-slate-700 outline-none cursor-pointer">
+                    <option value="career" data-i18n="btn_career">💼 Career Coach</option>
+                    <option value="job" data-i18n="btn_job">🎯 Job Matcher</option>
+                    <option value="copilot" data-i18n="btn_copilot">🏛 Financial Aid</option>
+                    <option value="bridge" data-i18n="btn_bridge">🌉 Grant-to-Career</option>
+                </select>
+
+                <!-- Desktop View Switcher Buttons (Visible only on medium screens and up >= md) -->
+                <div class="hidden md:flex items-center gap-2">
+                    <button onclick="switchView('career')" id="btn-career" data-i18n="btn_career" class="text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm">
+                        💼 Career Coach
+                    </button>
+                    <button onclick="switchView('job')" id="btn-job" data-i18n="btn_job" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm">
+                        🎯 Job Matcher
+                    </button>
+                    <button onclick="switchView('copilot')" id="btn-copilot" data-i18n="btn_copilot" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm">
+                        🏛 Financial Aid
+                    </button>
+                    <button onclick="switchView('bridge')" id="btn-bridge" data-i18n="btn_bridge" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 transition shadow-sm">
+                        🌉 Grant-to-Career
+                    </button>
+                </div>
+
+                <!-- Language Dropdown Selector -->
+                <select id="lang-select" onchange="changeLanguage(this.value)" class="text-xs font-semibold px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition shadow-sm outline-none cursor-pointer">
+                    <option value="en">🇬🇧 EN</option>
+                    <option value="zh-tw">🇭🇰 繁體</option>
+                    <option value="zh-cn">🇨🇳 简体</option>
+                </select>
+
+                <!-- Logout Button -->
+                <a href="/api/logout" class="text-xs font-semibold px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-rose-300 border border-slate-700 transition shadow-sm" title="Lock session">🔒 Lock</a>
             </div>
         </div>
     </header>
 
     <!-- MAIN APP VIEWS CONTAINER -->
-    <main class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-3 w-full flex-1 flex flex-col overflow-hidden">
+    <main class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-3 w-full flex-1 flex flex-col overflow-y-auto md:overflow-hidden">
 
         <!-- VIEW 1: CAREER COACH (DEFAULT) -->
-        <div id="view-career" class="flex-1 flex flex-col md:flex-row gap-4 h-full overflow-hidden">
+        <div id="view-career" class="flex-1 flex flex-col md:flex-row gap-4 h-full overflow-y-auto md:overflow-hidden">
             <!-- Sidebar controls -->
             <aside class="w-full md:w-80 flex flex-col gap-3 flex-shrink-0 overflow-y-auto max-h-[220px] md:max-h-none custom-scrollbar">
                 
                 <!-- New Chat & Chat History Panel -->
                 <div class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
                     <div class="flex items-center justify-between px-1">
-                        <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Chat History</h2>
-                        <button onclick="createNewChat()" class="text-[11px] bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-semibold transition">+ New Chat</button>
+                        <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider" data-i18n="chat_history_title">Chat History</h2>
+                        <button onclick="createNewChat()" data-i18n="new_chat_btn" class="text-[11px] bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-semibold transition">+ New Chat</button>
                     </div>
                     <div id="chat-history-list" class="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
                         <!-- Dynamic chat history items inserted here -->
@@ -267,31 +343,31 @@ UNIFIED_HTML_TEMPLATE = r"""
                 </div>
 
                 <div class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
-                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1">Upload Resume (PDF/TXT)</h2>
+                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1" data-i18n="upload_resume_title">Upload Resume (PDF/TXT)</h2>
                     <label for="pdf-file-input" class="cursor-pointer flex items-center justify-center p-3 border border-dashed border-slate-700 hover:border-cyan-500/50 rounded-xl bg-slate-900/40 transition text-center">
-                        <span id="upload-status-text" class="text-xs text-slate-300 font-medium truncate">📎 Click to attach resume</span>
+                        <span id="upload-status-text" data-i18n="upload_resume_label" class="text-xs text-slate-300 font-medium truncate">📎 Click to attach resume</span>
                     </label>
                     <input id="pdf-file-input" type="file" accept=".pdf,.txt" class="hidden" onchange="handleFileUpload(event)">
                 </div>
 
                 <div class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
-                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1">Career Playbooks</h2>
+                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1" data-i18n="playbooks_title">Career Playbooks</h2>
                     <div class="grid grid-cols-2 md:grid-cols-1 gap-2">
-                        <button onclick="applyPreset('roast')" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/50 transition text-xs text-cyan-300 font-semibold truncate">🔥 Resume Roast</button>
-                        <button onclick="applyPreset('gap')" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-indigo-500/50 transition text-xs text-indigo-300 font-semibold truncate">🎯 Skill Gap Matrix</button>
-                        <button onclick="applyPreset('behavioral')" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/50 transition text-xs text-emerald-300 font-semibold truncate">🎙️ Interview Drill</button>
-                        <button onclick="applyPreset('roadmap')" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-purple-500/50 transition text-xs text-purple-300 font-semibold truncate">🗺️ 90-Day Roadmap</button>
+                        <button onclick="applyPreset('roast')" data-i18n="preset_roast" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/50 transition text-xs text-cyan-300 font-semibold truncate">🔥 Resume Roast</button>
+                        <button onclick="applyPreset('gap')" data-i18n="preset_gap" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-indigo-500/50 transition text-xs text-indigo-300 font-semibold truncate">🎯 Skill Gap Matrix</button>
+                        <button onclick="applyPreset('behavioral')" data-i18n="preset_behavioral" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/50 transition text-xs text-emerald-300 font-semibold truncate">🎙️ Interview Drill</button>
+                        <button onclick="applyPreset('roadmap')" data-i18n="preset_roadmap" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-purple-500/50 transition text-xs text-purple-300 font-semibold truncate">🗺️ 90-Day Roadmap</button>
                     </div>
                 </div>
 
                 <!-- Chat Actions (Export & Delete Active Chat) -->
                 <div id="sidebar-actions" class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
-                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1">Chat Actions</h2>
+                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1" data-i18n="chat_actions_title">Chat Actions</h2>
                     <div class="grid grid-cols-1 gap-2">
-                        <button onclick="exportMarkdown()" id="export-btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Export conversation history">
+                        <button onclick="exportMarkdown()" id="export-btn" data-i18n="export_btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Export conversation history">
                             📥 Export Active Chat
                         </button>
-                        <button onclick="deleteActiveChat()" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-rose-500/50 text-rose-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Delete active chat">
+                        <button onclick="deleteActiveChat()" data-i18n="delete_btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-rose-500/50 text-rose-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Delete active chat">
                             🗑️ Delete Active Chat
                         </button>
                     </div>
@@ -299,7 +375,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             </aside>
 
             <!-- Chat Panel -->
-            <section class="flex-1 glass-panel rounded-2xl flex flex-col overflow-hidden h-full min-w-0">
+            <section class="flex-1 glass-panel rounded-2xl flex flex-col overflow-hidden h-full min-h-[480px] md:min-h-0 min-w-0">
                 <div id="chat-stream" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-sm">
                     <!-- Dynamic chat messages loaded here -->
                 </div>
@@ -314,10 +390,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                 <div class="p-3 border-t border-slate-800/80 bg-slate-950/60 flex-shrink-0 flex flex-col gap-1.5">
                     <form id="chat-form" class="flex gap-2 items-center">
                         <textarea id="user-input" rows="1" class="flex-1 bg-slate-900 text-slate-100 text-base sm:text-sm rounded-xl px-4 py-3 border border-slate-800 focus:outline-none focus:border-cyan-500 custom-scrollbar resize-none min-h-[48px]" placeholder="Ask Boussole AI or select a playbook above..." required></textarea>
-                        <button type="submit" id="send-button" class="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl text-sm h-[48px] flex-shrink-0 transition">Send</button>
+                        <button type="submit" id="send-button" data-i18n="send_btn" class="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl text-sm h-[48px] flex-shrink-0 transition">Send</button>
                     </form>
                     <div class="text-[11px] text-slate-400 px-1 flex items-center justify-between">
-                        <span>💡 Tip: Press <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400 font-mono">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-purple-400 font-mono">Shift + Enter</kbd> for a new line.</span>
+                        <span data-i18n="tip_enter">💡 Tip: Press <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400 font-mono">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-purple-400 font-mono">Shift + Enter</kbd> for a new line.</span>
                     </div>
                 </div>
             </section>
@@ -329,49 +405,49 @@ UNIFIED_HTML_TEMPLATE = r"""
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-lg">🎯</div>
                     <div>
-                        <h2 class="text-base font-bold text-white">Multi-Role Job Compatibility & History Dashboard</h2>
-                        <p class="text-xs text-slate-400">Compare up to 10 roles simultaneously (descriptions optional). Use AI job recommendations based on your CV!</p>
+                        <h2 class="text-base font-bold text-white" data-i18n="job_view_title">Multi-Role Job Compatibility & History Dashboard</h2>
+                        <p class="text-xs text-slate-400" data-i18n="job_view_subtitle">Compare up to 10 roles simultaneously (descriptions optional). Use AI job recommendations based on your CV!</p>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Column A: Inputs -->
                     <div class="flex flex-col gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
-                        <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">1. CV & Target Roles</h3>
+                        <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider" data-i18n="job_col1_title">1. CV & Target Roles</h3>
                         
                         <div class="flex flex-col gap-1.5">
-                            <label class="text-xs font-semibold text-slate-300">Upload CV (PDF or TXT):</label>
+                            <label class="text-xs font-semibold text-slate-300" data-i18n="job_upload_label">Upload CV (PDF or TXT):</label>
                             <label for="job-file-input" class="cursor-pointer flex items-center justify-center p-3 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl bg-slate-950 transition text-center">
-                                <span id="job-upload-status" class="text-xs text-slate-300 font-medium truncate">📎 Click to upload CV file</span>
+                                <span id="job-upload-status" data-i18n="job_upload_status" class="text-xs text-slate-300 font-medium truncate">📎 Click to upload CV file</span>
                             </label>
                             <input id="job-file-input" type="file" accept=".pdf,.txt" class="hidden" onchange="handleJobFileUpload(event)">
                         </div>
 
                         <div class="flex flex-col gap-1.5">
-                            <label class="text-xs font-semibold text-slate-300">Or Paste CV Text Content:</label>
+                            <label class="text-xs font-semibold text-slate-300" data-i18n="job_paste_label">Or Paste CV Text Content:</label>
                             <textarea id="job-cv-text" rows="4" class="w-full bg-slate-950 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none" placeholder="Paste your resume text here..."></textarea>
                         </div>
 
                         <!-- AI Job Recommendation Button -->
-                        <button onclick="recommendJobs()" id="recommend-jobs-btn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-700/50 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
+                        <button onclick="recommendJobs()" id="recommend-jobs-btn" data-i18n="job_recommend_btn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-700/50 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
                             ✨ AI: Recommend Top Roles for My CV
                         </button>
 
                         <!-- Multiple Job Inputs List -->
                         <div class="flex flex-col gap-2">
                             <div class="flex justify-between items-center">
-                                <label class="text-xs font-semibold text-slate-300">Target Jobs (Up to 10 roles):</label>
-                                <button onclick="addJobInputBox()" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold">+ Add Role</button>
+                                <label class="text-xs font-semibold text-slate-300" data-i18n="job_target_label">Target Jobs (Up to 10 roles):</label>
+                                <button onclick="addJobInputBox()" data-i18n="job_add_role_btn" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold">+ Add Role</button>
                             </div>
                             <div id="job-inputs-list" class="flex flex-col gap-2">
                                 <div class="job-input-item flex flex-col gap-1.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                                    <input type="text" placeholder="Job Title (e.g. AI Software Engineer)" class="job-title-input w-full bg-slate-900 text-slate-100 text-xs rounded px-2.5 py-1.5 border border-slate-800 focus:outline-none focus:border-indigo-500">
-                                    <textarea rows="2" placeholder="Paste job description here (optional)..." class="job-desc-input w-full bg-slate-900 text-slate-200 text-xs rounded p-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none"></textarea>
+                                    <input type="text" placeholder="Job Title (e.g. AI Software Engineer)" data-i18n-placeholder="job_title_ph" class="job-title-input w-full bg-slate-900 text-slate-100 text-xs rounded px-2.5 py-1.5 border border-slate-800 focus:outline-none focus:border-indigo-500">
+                                    <textarea rows="2" placeholder="Paste job description here (optional)..." data-i18n-placeholder="job_desc_ph" class="job-desc-input w-full bg-slate-900 text-slate-200 text-xs rounded p-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none"></textarea>
                                 </div>
                             </div>
                         </div>
 
-                        <button onclick="runJobMatch()" id="job-submit-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-indigo-600/20">
+                        <button onclick="runJobMatch()" id="job-submit-btn" data-i18n="job_submit_btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-indigo-600/20">
                             Calculate Multi-Job Compatibility ⚡
                         </button>
                     </div>
@@ -379,13 +455,13 @@ UNIFIED_HTML_TEMPLATE = r"""
                     <!-- Column B: History & Results Feed -->
                     <div class="flex flex-col gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800 overflow-y-auto custom-scrollbar max-h-[600px] md:max-h-none">
                         <div class="flex justify-between items-center">
-                            <h3 class="text-xs font-bold text-cyan-400 uppercase tracking-wider">2. Compatibility History Feed</h3>
-                            <button onclick="clearJobHistory()" class="text-[10px] text-slate-400 hover:text-rose-400 transition">Clear History</button>
+                            <h3 class="text-xs font-bold text-cyan-400 uppercase tracking-wider" data-i18n="job_history_title">2. Compatibility History Feed</h3>
+                            <button onclick="clearJobHistory()" data-i18n="job_clear_btn" class="text-[10px] text-slate-400 hover:text-rose-400 transition">Clear History</button>
                         </div>
                         
                         <div id="job-placeholder-state" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 text-xs gap-2 min-h-[280px]">
                             <span class="text-3xl">📊</span>
-                            <p>Awaiting CV and job input.<br>Past runs accumulate here so you can track improvements.</p>
+                            <p data-i18n="job_history_empty">Awaiting CV and job input.<br>Past runs accumulate here so you can track improvements.</p>
                         </div>
 
                         <div id="job-history-container" class="flex flex-col gap-4">
@@ -396,90 +472,90 @@ UNIFIED_HTML_TEMPLATE = r"""
             </div>
         </div>
 
-        <!-- VIEW 3: STUDENT FINANCIAL AID PORTAL -->
-        <div id="view-copilot" class="hidden flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 h-full overflow-hidden">
+        <!-- VIEW 3: STUDENT FINANCIAL AID PORTAL (SPACIOUS & INDEPENDENTLY SCROLLABLE) -->
+        <div id="view-copilot" class="hidden flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 h-auto md:h-full overflow-y-auto md:overflow-hidden custom-scrollbar p-1">
             <!-- Left: Student Input & What-If Sliders with Custom Text Inputs -->
-            <section class="glass-panel rounded-2xl p-4 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
-                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">1. Check Your Financial Aid</h2>
+            <section class="glass-panel rounded-2xl p-5 flex flex-col gap-4 h-[460px] md:h-full overflow-y-auto custom-scrollbar flex-shrink-0">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider" data-i18n="copilot_col1_title">1. Check Your Financial Aid</h2>
                 <div class="grid grid-cols-2 gap-2">
-                    <button onclick="loadScenario('full_grant', 10000, 4)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-emerald-400 text-left truncate">🟢 Full Grant Profile</button>
-                    <button onclick="loadScenario('partial_grant', 18000, 4)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-cyan-300 text-left truncate">🔵 Partial Grant Profile</button>
-                    <button onclick="loadScenario('ineligible', 24000, 3)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-rose-400 text-left truncate">🔴 High Income Profile</button>
-                    <button onclick="loadScenario('missing_income', null, 2)" class="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-amber-300 text-left truncate">⚠️ Incomplete Profile</button>
+                    <button onclick="loadScenario('full_grant', 10000, 4)" data-i18n="scenario_full" class="p-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-emerald-400 text-left truncate">🟢 Full Grant Profile</button>
+                    <button onclick="loadScenario('partial_grant', 18000, 4)" data-i18n="scenario_partial" class="p-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-cyan-300 text-left truncate">🔵 Partial Grant Profile</button>
+                    <button onclick="loadScenario('ineligible', 24000, 3)" data-i18n="scenario_high" class="p-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-rose-400 text-left truncate">🔴 High Income Profile</button>
+                    <button onclick="loadScenario('missing_income', null, 2)" data-i18n="scenario_incomplete" class="p-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-amber-300 text-left truncate">⚠️ Incomplete Profile</button>
                 </div>
-                <textarea id="case-notes" rows="3" class="w-full bg-slate-900 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-cyan-500 custom-scrollbar resize-none" placeholder="Paste your financial situation or notes..."></textarea>
+                <textarea id="case-notes" rows="4" class="w-full bg-slate-900 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-cyan-500 custom-scrollbar resize-none" placeholder="Paste your financial situation or notes..." data-i18n-placeholder="copilot_notes_ph"></textarea>
                 
-                <button onclick="processCase()" id="process-btn" class="w-full py-2.5 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold text-xs rounded-xl hover:opacity-90 transition">Calculate My Eligibility</button>
+                <button onclick="processCase()" id="process-btn" data-i18n="copilot_calc_btn" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold text-xs rounded-xl hover:opacity-90 transition">Calculate My Eligibility</button>
 
                 <!-- What-If Simulator Panel with Custom Input Boxes -->
-                <div class="pt-2 border-t border-slate-800 flex flex-col gap-3 mt-1">
-                    <span class="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">🎛️ Explore "What-If" Scenarios</span>
+                <div class="pt-3 border-t border-slate-800 flex flex-col gap-3 mt-1">
+                    <span class="text-[11px] font-bold text-cyan-400 uppercase tracking-wider" data-i18n="copilot_whatif_title">🎛️ Explore "What-If" Scenarios</span>
                     
                     <div class="flex flex-col gap-1.5">
                         <div class="flex justify-between items-center text-[11px] text-slate-300">
-                            <span>Family Monthly Income (HKD):</span>
-                            <input id="income-input-box" type="number" min="0" max="100000" step="100" value="10000" class="w-24 bg-slate-900 text-cyan-300 font-bold text-xs rounded px-2 py-1 border border-slate-700 text-right focus:outline-none focus:border-cyan-500" oninput="syncFromBox('income')">
+                            <span data-i18n="copilot_income_label">Family Monthly Income (HKD):</span>
+                            <input id="income-input-box" type="number" min="0" max="100000" step="100" value="10000" class="w-24 bg-slate-900 text-cyan-300 font-bold text-xs rounded px-2 py-1.5 border border-slate-700 text-right focus:outline-none focus:border-cyan-500" oninput="syncFromBox('income')">
                         </div>
-                        <input id="income-slider" type="range" min="0" max="50000" step="500" value="10000" class="w-full accent-cyan-500 cursor-pointer" oninput="syncFromSlider('income')">
+                        <input id="income-slider" type="range" min="0" max="50000" step="500" value="10000" class="w-full accent-cyan-500 cursor-pointer py-1" oninput="syncFromSlider('income')">
                     </div>
 
                     <div class="flex flex-col gap-1.5">
                         <div class="flex justify-between items-center text-[11px] text-slate-300">
-                            <span>Household Members:</span>
-                            <input id="members-input-box" type="number" min="1" max="15" step="1" value="4" class="w-20 bg-slate-900 text-cyan-300 font-bold text-xs rounded px-2 py-1 border border-slate-700 text-right focus:outline-none focus:border-cyan-500" oninput="syncFromBox('members')">
+                            <span data-i18n="copilot_members_label">Household Members:</span>
+                            <input id="members-input-box" type="number" min="1" max="15" step="1" value="4" class="w-20 bg-slate-900 text-cyan-300 font-bold text-xs rounded px-2 py-1.5 border border-slate-700 text-right focus:outline-none focus:border-cyan-500" oninput="syncFromBox('members')">
                         </div>
-                        <input id="members-slider" type="range" min="1" max="8" step="1" value="4" class="w-full accent-cyan-500 cursor-pointer" oninput="syncFromSlider('members')">
+                        <input id="members-slider" type="range" min="1" max="8" step="1" value="4" class="w-full accent-cyan-500 cursor-pointer py-1" oninput="syncFromSlider('members')">
                     </div>
                 </div>
             </section>
 
             <!-- Middle: PII Privacy Shield -->
-            <section class="glass-panel rounded-2xl p-4 flex flex-col gap-3 overflow-hidden">
-                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">2. Privacy Shield (PDPO Compliant)</h2>
-                <div id="pii-status" class="hidden p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs flex justify-between items-center">
-                    <span class="text-slate-300">Protected Data:</span>
+            <section class="glass-panel rounded-2xl p-5 flex flex-col gap-3 h-[420px] md:h-full overflow-y-auto custom-scrollbar flex-shrink-0">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider" data-i18n="copilot_privacy_title">2. Privacy Shield (PDPO Compliant)</h2>
+                <div id="pii-status" class="hidden p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs flex justify-between items-center">
+                    <span class="text-slate-300" data-i18n="copilot_protected_label">Protected Data:</span>
                     <span id="pii-count" class="font-bold text-cyan-400">0 Redacted</span>
                 </div>
-                <div id="sanitized-text" class="flex-1 bg-slate-950 p-3 rounded-xl border border-slate-900 text-xs text-slate-400 font-mono overflow-y-auto custom-scrollbar">Awaiting input...</div>
+                <div id="sanitized-text" data-i18n="copilot_awaiting_input" class="flex-1 bg-slate-950 p-4 rounded-xl border border-slate-900 text-xs text-slate-400 font-mono overflow-y-auto custom-scrollbar min-h-[220px]">Awaiting input...</div>
             </section>
 
             <!-- Right: Results, Checklist & Standalone Hardship Appeal Card -->
-            <section class="glass-panel rounded-2xl p-4 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
-                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">3. Your Result & Action Plan</h2>
+            <section class="glass-panel rounded-2xl p-5 flex flex-col gap-4 h-[540px] md:h-full overflow-y-auto custom-scrollbar flex-shrink-0">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider" data-i18n="copilot_result_title">3. Your Result & Action Plan</h2>
                 
                 <!-- Verdict Card (Box 3) -->
                 <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
                     <div class="flex justify-between items-center">
-                        <span class="text-xs text-slate-400">Estimated Status:</span>
-                        <span id="verdict-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">AWAITING</span>
+                        <span class="text-xs text-slate-400" data-i18n="copilot_status_label">Estimated Status:</span>
+                        <span id="verdict-badge" data-i18n="copilot_awaiting_badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">AWAITING</span>
                     </div>
-                    <h3 id="verdict-title" class="text-sm font-bold text-white">No active profile checked</h3>
-                    <p id="verdict-details" class="text-xs text-slate-400">Calculate your eligibility above to view details.</p>
+                    <h3 id="verdict-title" data-i18n="copilot_no_profile" class="text-sm font-bold text-white">No active profile checked</h3>
+                    <p id="verdict-details" data-i18n="copilot_calc_prompt" class="text-xs text-slate-400">Calculate your eligibility above to view details.</p>
                     
                     <div class="pt-2 border-t border-slate-800">
-                        <span class="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Official Policy Reference:</span>
+                        <span class="text-[10px] uppercase font-bold text-cyan-400 tracking-wider" data-i18n="copilot_policy_label">Official Policy Reference:</span>
                         <p id="verdict-citation" class="text-xs text-slate-300 font-medium italic mt-1">—</p>
                     </div>
 
                     <div class="pt-2 border-t border-slate-800">
-                        <span class="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">📋 Your Document Checklist:</span>
+                        <span class="text-[10px] uppercase font-bold text-emerald-400 tracking-wider" data-i18n="copilot_checklist_label">📋 Your Document Checklist:</span>
                         <ul id="document-checklist" class="text-xs text-slate-200 space-y-1 mt-1 pl-2">
-                            <li>• Awaiting evaluation...</li>
+                            <li data-i18n="copilot_checklist_awaiting">• Awaiting evaluation...</li>
                         </ul>
                     </div>
                 </div>
 
                 <!-- Student Hardship Appeal Request -->
-                <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col gap-2">
-                    <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider">⚠️ Request Special Hardship Review</span>
-                    <p class="text-[11px] text-slate-400 leading-tight">Facing unexpected financial hardship or medical issues? Submit an appeal for human officer review.</p>
-                    <select id="override-reason" class="w-full bg-slate-950 text-slate-200 text-xs rounded-lg p-2 border border-slate-800 outline-none">
-                        <option value="">Select your special circumstance...</option>
-                        <option value="Sudden Family Medical Emergency / Hardship">Sudden Family Medical Emergency / Hardship</option>
-                        <option value="Unexpected Loss of Family Breadwinner">Unexpected Loss of Family Breadwinner</option>
-                        <option value="Fluctuating/Seasonal Income Discrepancy">Fluctuating/Seasonal Income Discrepancy</option>
+                <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col gap-2.5">
+                    <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider" data-i18n="copilot_appeal_title">⚠️️ Request Special Hardship Review</span>
+                    <p class="text-[11px] text-slate-400 leading-tight" data-i18n="copilot_appeal_desc">Facing unexpected financial hardship or medical issues? Submit an appeal for human officer review.</p>
+                    <select id="override-reason" class="w-full bg-slate-950 text-slate-200 text-xs rounded-lg p-2.5 border border-slate-800 outline-none">
+                        <option value="" data-i18n="copilot_appeal_default">Select your special circumstance...</option>
+                        <option value="Sudden Family Medical Emergency / Hardship" data-i18n="appeal_opt1">Sudden Family Medical Emergency / Hardship</option>
+                        <option value="Unexpected Loss of Family Breadwinner" data-i18n="appeal_opt2">Unexpected Loss of Family Breadwinner</option>
+                        <option value="Fluctuating/Seasonal Income Discrepancy" data-i18n="appeal_opt3">Fluctuating/Seasonal Income Discrepancy</option>
                     </select>
-                    <button onclick="executeOverride()" class="py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs rounded-lg transition">
+                    <button onclick="executeOverride()" data-i18n="copilot_appeal_btn" class="py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs rounded-lg transition">
                         Submit Appeal for Officer Review
                     </button>
                     <div id="override-timestamp" class="text-[10px] text-slate-400 italic text-center hidden"></div>
@@ -493,8 +569,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold text-lg">🌉</div>
                     <div>
-                        <h2 class="text-base font-bold text-white">Grant-to-Career Livelihood & Work-Study Bridge</h2>
-                        <p class="text-xs text-slate-400">Bridging financial aid shortfalls with verified campus employment and upskilling opportunities.</p>
+                        <h2 class="text-base font-bold text-white" data-i18n="bridge_title">Grant-to-Career Livelihood & Work-Study Bridge</h2>
+                        <p class="text-xs text-slate-400" data-i18n="bridge_subtitle">Bridging financial aid shortfalls with verified campus employment and upskilling opportunities.</p>
                     </div>
                 </div>
 
@@ -502,7 +578,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
                     <div class="flex flex-col gap-1.5">
                         <div class="flex justify-between items-center text-[11px] text-slate-300">
-                            <span>Family Monthly Income:</span>
+                            <span data-i18n="bridge_income_label">Family Monthly Income:</span>
                             <input id="bridge-income-input-box" type="number" min="0" max="100000" step="100" value="10000" class="w-24 bg-slate-950 text-cyan-300 font-bold text-xs rounded px-2 py-1 border border-slate-700 text-right focus:outline-none focus:border-purple-500" oninput="syncBridgeFromBox('income')">
                         </div>
                         <input id="bridge-income-slider" type="range" min="0" max="50000" step="500" value="10000" class="w-full accent-purple-500 cursor-pointer" oninput="syncBridgeFromSlider('income')">
@@ -510,7 +586,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
                     <div class="flex flex-col gap-1.5">
                         <div class="flex justify-between items-center text-[11px] text-slate-300">
-                            <span>Tuition Fee:</span>
+                            <span data-i18n="bridge_tuition_label">Tuition Fee:</span>
                             <input id="tuition-input-box" type="number" min="0" max="200000" step="500" value="42100" class="w-24 bg-slate-950 text-purple-300 font-bold text-xs rounded px-2 py-1 border border-slate-700 text-right focus:outline-none focus:border-purple-500" oninput="syncBridgeFromBox('tuition')">
                         </div>
                         <input id="tuition-slider" type="range" min="10000" max="100000" step="1000" value="42100" class="w-full accent-purple-500 cursor-pointer" oninput="syncBridgeFromSlider('tuition')">
@@ -518,7 +594,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
                     <div class="flex flex-col gap-1.5">
                         <div class="flex justify-between items-center text-[11px] text-slate-300">
-                            <span>Living Expenses:</span>
+                            <span data-i18n="bridge_living_label">Living Expenses:</span>
                             <input id="living-input-box" type="number" min="0" max="200000" step="500" value="30000" class="w-24 bg-slate-950 text-emerald-300 font-bold text-xs rounded px-2 py-1 border border-slate-700 text-right focus:outline-none focus:border-purple-500" oninput="syncBridgeFromBox('living')">
                         </div>
                         <input id="living-slider" type="range" min="0" max="80000" step="1000" value="30000" class="w-full accent-purple-500 cursor-pointer" oninput="syncBridgeFromSlider('living')">
@@ -527,46 +603,46 @@ UNIFIED_HTML_TEMPLATE = r"""
 
                 <!-- Shortfall & Loan Eligibility Panel -->
                 <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
-                    <h3 class="text-xs font-bold text-purple-400 uppercase tracking-wider">Your Dynamic Financial Shortfall & Loan Eligibility</h3>
-                    <p class="text-xs text-slate-300">Based on your FASP tier and custom expense inputs, your total financial gap is: <strong id="dynamic-shortfall" class="text-cyan-400">HKD $21,050</strong>.</p>
+                    <h3 class="text-xs font-bold text-purple-400 uppercase tracking-wider" data-i18n="bridge_shortfall_title">Your Dynamic Financial Shortfall & Loan Eligibility</h3>
+                    <p class="text-xs text-slate-300"><span data-i18n="bridge_shortfall_text">Based on your FASP tier and custom expense inputs, your total financial gap is:</span> <strong id="dynamic-shortfall" class="text-cyan-400">HKD $21,050</strong>.</p>
                     
                     <div class="p-3 rounded-lg bg-slate-950 border border-slate-800 flex flex-col gap-1 text-xs">
                         <div class="flex justify-between items-center">
-                            <span class="text-slate-300 font-semibold">Government Loan Status:</span>
-                            <span id="loan-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">ELIGIBLE FOR NLSFT LOAN</span>
+                            <span class="text-slate-300 font-semibold" data-i18n="bridge_loan_status_label">Government Loan Status:</span>
+                            <span id="loan-status-badge" data-i18n="bridge_loan_eligible_badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">ELIGIBLE FOR NLSFT LOAN</span>
                         </div>
-                        <p id="loan-details" class="text-slate-400 mt-1">You are eligible to borrow up to <strong id="max-loan-amount" class="text-cyan-300">HKD $72,100</strong> via government schemes (NLSFT / Non-Means-Tested Loan Scheme) to cover your remaining tuition and living expenses.</p>
+                        <p id="loan-details" class="text-slate-400 mt-1" data-i18n="bridge_loan_desc">You are eligible to borrow up to <strong class="text-cyan-300">HKD $72,100</strong> via government schemes (NLSFT / Non-Means-Tested Loan Scheme) to cover your remaining tuition and living expenses.</p>
                     </div>
 
-                    <div class="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                    <div class="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-400" data-i18n="bridge_tip">
                         💡 <strong>Recommended Action:</strong> Secure a flexible on-campus work-study role or tech internship to cover monthly living expenses and minimize student loan debt.
                     </div>
                 </div>
 
                 <div class="flex flex-col gap-3">
-                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Matched Campus Jobs & Work-Study Programs</h3>
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider" data-i18n="bridge_matched_jobs_title">Matched Campus Jobs & Work-Study Programs</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col justify-between gap-3">
                             <div>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">Part-Time / Flexible</span>
-                                <h4 class="text-sm font-bold text-white mt-2">AI Lab Student Assistant (HKUST)</h4>
-                                <p class="text-xs text-slate-400 mt-1">Assist researchers with Python data processing and script optimization. Flexible hours around your class schedule.</p>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800" data-i18n="job_badge_flexible">Part-Time / Flexible</span>
+                                <h4 class="text-sm font-bold text-white mt-2" data-i18n="bridge_job1_title">AI Lab Student Assistant (HKUST)</h4>
+                                <p class="text-xs text-slate-400 mt-1" data-i18n="bridge_job1_desc">Assist researchers with Python data processing and script optimization. Flexible hours around your class schedule.</p>
                             </div>
                             <div class="flex justify-between items-center pt-2 border-t border-slate-800">
                                 <span class="text-xs font-bold text-cyan-400">HKD $120 / hour</span>
-                                <button onclick="alert('Application draft sent to Career Coach!')" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg transition">Apply with AI Coach</button>
+                                <button onclick="alert('Application draft sent to Career Coach!')" data-i18n="bridge_apply_btn" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg transition">Apply with AI Coach</button>
                             </div>
                         </div>
 
                         <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col justify-between gap-3">
                             <div>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-400 border border-indigo-800">Work-Study Grant</span>
-                                <h4 class="text-sm font-bold text-white mt-2">Student Financial Aid Student Ambassador</h4>
-                                <p class="text-xs text-slate-400 mt-1">Help peers navigate campus digital forms and administrative document checklists.</p>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-400 border border-indigo-800" data-i18n="job_badge_grant">Work-Study Grant</span>
+                                <h4 class="text-sm font-bold text-white mt-2" data-i18n="bridge_job2_title">Student Financial Aid Student Ambassador</h4>
+                                <p class="text-xs text-slate-400 mt-1" data-i18n="bridge_job2_desc">Help peers navigate campus digital forms and administrative document checklists.</p>
                             </div>
                             <div class="flex justify-between items-center pt-2 border-t border-slate-800">
                                 <span class="text-xs font-bold text-cyan-400">HKD $4,500 / month</span>
-                                <button onclick="alert('Application draft sent to Career Coach!')" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg transition">Apply with AI Coach</button>
+                                <button onclick="alert('Application draft sent to Career Coach!')" data-i18n="bridge_apply_btn" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg transition">Apply with AI Coach</button>
                             </div>
                         </div>
                     </div>
@@ -578,6 +654,321 @@ UNIFIED_HTML_TEMPLATE = r"""
 
     <!-- Frontend Script Logic -->
     <script>
+        const translations = {
+            en: {
+                brand_subtitle_career: "Career Intelligence & Roadmapping",
+                btn_career: "💼 Career Coach",
+                btn_job: "🎯 Job Matcher",
+                btn_copilot: "🏛 Financial Aid",
+                btn_bridge: "🌉 Grant-to-Career",
+                chat_history_title: "Chat History",
+                new_chat_btn: "+ New Chat",
+                upload_resume_title: "Upload Resume (PDF/TXT)",
+                upload_resume_label: "📎 Click to attach resume",
+                playbooks_title: "Career Playbooks",
+                preset_roast: "🔥 Resume Roast",
+                preset_gap: "🎯 Skill Gap Matrix",
+                preset_behavioral: "🎙️ Interview Drill",
+                preset_roadmap: "🗺️ 90-Day Roadmap",
+                chat_actions_title: "Chat Actions",
+                export_btn: "📥 Export Active Chat",
+                delete_btn: "🗑️ Delete Active Chat",
+                chat_placeholder: "Ask Boussole AI or select a playbook above...",
+                send_btn: "Send",
+                tip_enter: "💡 Tip: Press Enter to send, Shift + Enter for a new line.",
+                
+                // Job Matcher View
+                job_view_title: "Multi-Role Job Compatibility & History Dashboard",
+                job_view_subtitle: "Compare up to 10 roles simultaneously (descriptions optional). Use AI job recommendations based on your CV!",
+                job_col1_title: "1. CV & Target Roles",
+                job_upload_label: "Upload CV (PDF or TXT):",
+                job_upload_status: "📎 Click to upload CV file",
+                job_paste_label: "Or Paste CV Text Content:",
+                job_recommend_btn: "✨ AI: Recommend Top Roles for My CV",
+                job_target_label: "Target Jobs (Up to 10 roles):",
+                job_add_role_btn: "+ Add Role",
+                job_title_ph: "Job Title (e.g. AI Software Engineer)",
+                job_desc_ph: "Paste job description here (optional)...",
+                job_submit_btn: "Calculate Multi-Job Compatibility ⚡",
+                job_history_title: "2. Compatibility History Feed",
+                job_clear_btn: "Clear History",
+                job_history_empty: "Awaiting CV and job input.<br>Past runs accumulate here so you can track improvements.",
+
+                // Financial Aid Copilot View
+                copilot_col1_title: "1. Check Your Financial Aid",
+                scenario_full: "🟢 Full Grant Profile",
+                scenario_partial: "🔵 Partial Grant Profile",
+                scenario_high: "🔴 High Income Profile",
+                scenario_incomplete: "⚠️ Incomplete Profile",
+                copilot_notes_ph: "Paste your financial situation or notes...",
+                copilot_calc_btn: "Calculate My Eligibility",
+                copilot_whatif_title: "🎛️ Explore \"What-If\" Scenarios",
+                copilot_income_label: "Family Monthly Income (HKD):",
+                copilot_members_label: "Household Members:",
+                copilot_privacy_title: "2. Privacy Shield (PDPO Compliant)",
+                copilot_protected_label: "Protected Data:",
+                copilot_awaiting_input: "Awaiting input...",
+                copilot_result_title: "3. Your Result & Action Plan",
+                copilot_status_label: "Estimated Status:",
+                copilot_awaiting_badge: "AWAITING",
+                copilot_no_profile: "No active profile checked",
+                copilot_calc_prompt: "Calculate your eligibility above to view details.",
+                copilot_policy_label: "Official Policy Reference:",
+                copilot_checklist_label: "📋 Your Document Checklist:",
+                copilot_checklist_awaiting: "• Awaiting evaluation...",
+                copilot_appeal_title: "⚠️ Request Special Hardship Review",
+                copilot_appeal_desc: "Facing unexpected financial hardship or medical issues? Submit an appeal for human officer review.",
+                copilot_appeal_default: "Select your special circumstance...",
+                appeal_opt1: "Sudden Family Medical Emergency / Hardship",
+                appeal_opt2: "Unexpected Loss of Family Breadwinner",
+                appeal_opt3: "Fluctuating/Seasonal Income Discrepancy",
+                copilot_appeal_btn: "Submit Appeal for Officer Review",
+
+                // Grant-to-Career Bridge View
+                bridge_title: "Grant-to-Career Livelihood & Work-Study Bridge",
+                bridge_subtitle: "Bridging financial aid shortfalls with verified campus employment and upskilling opportunities.",
+                bridge_income_label: "Family Monthly Income:",
+                bridge_tuition_label: "Tuition Fee:",
+                bridge_living_label: "Living Expenses:",
+                bridge_shortfall_title: "Your Dynamic Financial Shortfall & Loan Eligibility",
+                bridge_shortfall_text: "Based on your FASP tier and custom expense inputs, your total financial gap is:",
+                bridge_loan_status_label: "Government Loan Status:",
+                bridge_loan_eligible_badge: "ELIGIBLE FOR NLSFT LOAN",
+                bridge_loan_desc: "You are eligible to borrow up to via government schemes (NLSFT / Non-Means-Tested Loan Scheme) to cover your remaining tuition and living expenses.",
+                bridge_tip: "💡 Recommended Action: Secure a flexible on-campus work-study role or tech internship to cover monthly living expenses and minimize student loan debt.",
+                bridge_matched_jobs_title: "Matched Campus Jobs & Work-Study Programs",
+                job_badge_flexible: "Part-Time / Flexible",
+                job_badge_grant: "Work-Study Grant",
+                bridge_job1_title: "AI Lab Student Assistant (HKUST)",
+                bridge_job1_desc: "Assist researchers with Python data processing and script optimization. Flexible hours around your class schedule.",
+                bridge_job2_title: "Student Financial Aid Student Ambassador",
+                bridge_job2_desc: "Help peers navigate campus digital forms and administrative document checklists.",
+                bridge_apply_btn: "Apply with AI Coach"
+            },
+            "zh-tw": {
+                brand_subtitle_career: "職涯智能與路徑規劃",
+                btn_career: "💼 職涯教練",
+                btn_job: "🎯 職缺匹配",
+                btn_copilot: "🏛 學生資助",
+                btn_bridge: "🌉 資助與就業橋樑",
+                chat_history_title: "對話紀錄",
+                new_chat_btn: "+ 新對話",
+                upload_resume_title: "上傳履歷 (PDF/TXT)",
+                upload_resume_label: "📎 點擊附加履歷",
+                playbooks_title: "職涯錦囊",
+                preset_roast: "🔥 履歷健檢",
+                preset_gap: "🎯 技能落差矩陣",
+                preset_behavioral: "🎙️ 面試模擬",
+                preset_roadmap: "🗺️ 90天職涯藍圖",
+                chat_actions_title: "對話操作",
+                export_btn: "📥 匯出當前對話",
+                delete_btn: "🗑 刪除當前對話",
+                chat_placeholder: "向 Boussole AI 提問或選擇上方錦囊...",
+                send_btn: "發送",
+                tip_enter: "💡 提示：按 Enter 發送，Shift + Enter 換行。",
+
+                // Job Matcher View
+                job_view_title: "多角色職缺匹配與歷史儀表板",
+                job_view_subtitle: "同時比較最多 10 個職位（職缺描述選填）。利用基於您履歷的 AI 職缺推薦！",
+                job_col1_title: "1. 履歷與目標職位",
+                job_upload_label: "上傳履歷 (PDF 或 TXT)：",
+                job_upload_status: "📎 點擊上傳履歷檔案",
+                job_paste_label: "或貼上履歷文字內容：",
+                job_recommend_btn: "✨ AI：推薦最適合我的職位",
+                job_target_label: "目標職位 (最多 10 個)：",
+                job_add_role_btn: "+ 新增職位",
+                job_title_ph: "職稱 (例如：AI 軟體工程師)",
+                job_desc_ph: "在此貼上職缺描述 (選填)...",
+                job_submit_btn: "計算多職位匹配度 ⚡",
+                job_history_title: "2. 匹配歷史與紀錄",
+                job_clear_btn: "清除歷史",
+                job_history_empty: "等待上傳履歷與輸入職位。<br>過去的分析記錄會累積在此以追蹤進步。",
+
+                // Financial Aid Copilot View
+                copilot_col1_title: "1. 查詢學生資助資格",
+                scenario_full: "🟢 全額資助檔案",
+                scenario_partial: "🔵 半額資助檔案",
+                scenario_high: "🔴 高收入檔案",
+                scenario_incomplete: "⚠️ 資料不全檔案",
+                copilot_notes_ph: "貼上您的財務狀況或筆記...",
+                copilot_calc_btn: "計算我的資助資格",
+                copilot_whatif_title: "🎛️ 探索「假設情境」",
+                copilot_income_label: "家庭每月總收入 (港幣)：",
+                copilot_members_label: "同住家庭成員人數：",
+                copilot_privacy_title: "2. 隱私防護罩 (符合個人資料私隱條例)",
+                copilot_protected_label: "已保護資料：",
+                copilot_awaiting_input: "等待輸入...",
+                copilot_result_title: "3. 審查結果與行動方案",
+                copilot_status_label: "預估狀態：",
+                copilot_awaiting_badge: "等待中",
+                copilot_no_profile: "尚未檢測有效檔案",
+                copilot_calc_prompt: "請於上方計算您的資格以查看詳細資訊。",
+                copilot_policy_label: "官方政策參照：",
+                copilot_checklist_label: "📋 所需文件清單：",
+                copilot_checklist_awaiting: "• 等待評估...",
+                copilot_appeal_title: "⚠️ 申請特殊經濟困難覆核",
+                copilot_appeal_desc: "面臨突發經濟困難或醫療問題？可提交申請由專人人工審查。",
+                copilot_appeal_default: "選擇您的特殊情況...",
+                appeal_opt1: "突發家庭醫療緊急情況 / 經濟困難",
+                appeal_opt2: "家庭經濟支柱突然喪失",
+                appeal_opt3: "收入波動 / 季節性收入落差",
+                copilot_appeal_btn: "提交專人覆核申請",
+
+                // Grant-to-Career Bridge View
+                bridge_title: "資助與就業橋樑 (工作學習計畫)",
+                bridge_subtitle: "以校內工讀與職能培訓彌補學生資助缺口。",
+                bridge_income_label: "家庭每月收入：",
+                bridge_tuition_label: "學費金額：",
+                bridge_living_label: "生活費預算：",
+                bridge_shortfall_title: "您的動態財務缺口與貸款資格",
+                bridge_shortfall_text: "根據您的資助級距與自訂開支，您的總財務缺口為：",
+                bridge_loan_status_label: "政府貸款狀態：",
+                bridge_loan_eligible_badge: "符合免入息審查貸款資格",
+                bridge_loan_desc: "您符合透過政府非免入息審查貸款計畫 (NLSFT) 借款的資格，以涵蓋剩餘學費與生活開支。",
+                bridge_tip: "💡 建議行動：爭取校內彈性工讀或科技實習，以支應每月生活開支並減少學生貸款負債。",
+                bridge_matched_jobs_title: "配對之校內工讀與工作學習計畫",
+                job_badge_flexible: "兼職 / 彈性工時",
+                job_badge_grant: "工讀資助計畫",
+                bridge_job1_title: "AI 實驗室學生助理 (港科大)",
+                bridge_job1_desc: "協助研究人員進行 Python 資料處理與腳本優化。可配合您的課表彈性排班。",
+                bridge_job2_title: "學生資助處學生大使",
+                bridge_job2_desc: "協助同儕熟悉校內數位表格與行政文件檢核表。",
+                bridge_apply_btn: "透過 AI 教練應徵"
+            },
+            "zh-cn": {
+                brand_subtitle_career: "职涯智能与路径规划",
+                btn_career: "💼 职涯教练",
+                btn_job: "🎯 职位匹配",
+                btn_copilot: "🏛 学生资助",
+                btn_bridge: "🌉 资助与就业桥梁",
+                chat_history_title: "对话记录",
+                new_chat_btn: "+ 新对话",
+                upload_resume_title: "上传简历 (PDF/TXT)",
+                upload_resume_label: "📎 点击附加简历",
+                playbooks_title: "职涯锦囊",
+                preset_roast: "🔥 简历健检",
+                preset_gap: "🎯 技能落差矩阵",
+                preset_behavioral: "🎙️ 面试模拟",
+                preset_roadmap: "🗺 90天职涯蓝图",
+                chat_actions_title: "对话操作",
+                export_btn: "📥 导出当前对话",
+                delete_btn: "🗑️ 删除当前对话",
+                chat_placeholder: "向 Boussole AI 提问或选择上方锦囊...",
+                send_btn: "发送",
+                tip_enter: "💡 提示：按 Enter 发送，Shift + Enter 换行。",
+
+                // Job Matcher View
+                job_view_title: "多角色职位匹配与历史仪表板",
+                job_view_subtitle: "同时比较最多 10 个职位（职位描述选填）。利用基于您简历的 AI 职位推荐！",
+                job_col1_title: "1. 简历与目标职位",
+                job_upload_label: "上传简历 (PDF 或 TXT)：",
+                job_upload_status: "📎 点击上传简历文件",
+                job_paste_label: "或粘贴简历文字内容：",
+                job_recommend_btn: "✨ AI：推荐最适合我的职位",
+                job_target_label: "目标职位 (最多 10 个)：",
+                job_add_role_btn: "+ 新增职位",
+                job_title_ph: "职称 (例如：AI 软件工程师)",
+                job_desc_ph: "在此粘贴职位描述 (选填)...",
+                job_submit_btn: "计算多职位匹配度 ⚡",
+                job_history_title: "2. 匹配历史与记录",
+                job_clear_btn: "清除历史",
+                job_history_empty: "等待上传简历与输入职位。<br>过去的分析记录会累积在此以追踪进步。",
+
+                // Financial Aid Copilot View
+                copilot_col1_title: "1. 查询学生资助资格",
+                scenario_full: "🟢 全额资助档案",
+                scenario_partial: "🔵 半额资助档案",
+                scenario_high: "🔴 高收入档案",
+                scenario_incomplete: "⚠️ 资料不全档案",
+                copilot_notes_ph: "粘贴您的财务状况或笔记...",
+                copilot_calc_btn: "计算我的资助资格",
+                copilot_whatif_title: "🎛️ 探索“假设情境”",
+                copilot_income_label: "家庭每月总收入 (港币)：",
+                copilot_members_label: "同住家庭成员人数：",
+                copilot_privacy_title: "2. 隐私防护罩 (符合个人资料隐私条例)",
+                copilot_protected_label: "已保护数据：",
+                copilot_awaiting_input: "等待输入...",
+                copilot_result_title: "3. 审查结果与行动方案",
+                copilot_status_label: "预估状态：",
+                copilot_awaiting_badge: "等待中",
+                copilot_no_profile: "尚未检测有效档案",
+                copilot_calc_prompt: "请于上方计算您的资格以查看详细信息。",
+                copilot_policy_label: "官方政策参照：",
+                copilot_checklist_label: "📋 所需文件清单：",
+                copilot_checklist_awaiting: "• 等待评估...",
+                copilot_appeal_title: "⚠️ 申请特殊经济困难复核",
+                copilot_appeal_desc: "面临突发经济困难或医疗问题？可提交申请由专人人工审查。",
+                copilot_appeal_default: "选择您的特殊情况...",
+                appeal_opt1: "Sudden Family Medical Emergency / Hardship",
+                appeal_opt2: "Unexpected Loss of Family Breadwinner",
+                appeal_opt3: "Fluctuating/Seasonal Income Discrepancy",
+                copilot_appeal_btn: "提交专人复核申请",
+
+                // Grant-to-Career Bridge View
+                bridge_title: "资助与就业桥梁 (工作学习计划)",
+                bridge_subtitle: "以校内工读与职能培训弥补学生资助缺口。",
+                bridge_income_label: "家庭每月收入：",
+                bridge_tuition_label: "学费金额：",
+                bridge_living_label: "生活费预算：",
+                bridge_shortfall_title: "您的动态财务缺口与贷款资格",
+                bridge_shortfall_text: "根据您的资助级距与自订开支，您的总财务缺口为：",
+                bridge_loan_status_label: "政府贷款状态：",
+                bridge_loan_eligible_badge: "符合免入息审查贷款资格",
+                bridge_loan_desc: "您符合通过政府非免入息审查贷款计划 (NLSFT) 借款的资格，以涵盖剩余学费与生活开支。",
+                bridge_tip: "💡 建议行动：争取校内弹性工读或科技实习，以支应每月生活开支并减少学生贷款负债。",
+                bridge_matched_jobs_title: "配对之校内工读与工作学习计划",
+                job_badge_flexible: "兼职 / 弹性工时",
+                job_badge_grant: "工读资助计划",
+                bridge_job1_title: "AI 实验室学生助理 (港科大)",
+                bridge_job1_desc: "协助研究人员进行 Python 数据处理与脚本优化。可配合您的课表弹性排班。",
+                bridge_job2_title: "学生资助处学生大使",
+                bridge_job2_desc: "协助同侪熟悉校内数字表格与行政文件检核表。",
+                bridge_apply_btn: "透過 AI 教練應聘"
+            }
+        };
+
+        let currentLang = 'en';
+
+        function changeLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('boussole_lang', lang);
+            const t = translations[currentLang] || translations.en;
+
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) {
+                    el.innerHTML = t[key];
+                }
+            });
+
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (t[key]) {
+                    el.placeholder = t[key];
+                }
+            });
+
+            const userInput = document.getElementById('user-input');
+            if (userInput && t.chat_placeholder) {
+                userInput.placeholder = t.chat_placeholder;
+            }
+
+            const caseNotes = document.getElementById('case-notes');
+            if (caseNotes && t.copilot_notes_ph) {
+                caseNotes.placeholder = t.copilot_notes_ph;
+            }
+
+            const jobCvText = document.getElementById('job-cv-text');
+            if (jobCvText) {
+                const cvPlaceholderMap = {
+                    en: "Paste your resume text here...",
+                    "zh-tw": "在此貼上您的履歷文字...",
+                    "zh-cn": "在此粘贴您的简历文字..."
+                };
+                jobCvText.placeholder = cvPlaceholderMap[currentLang] || cvPlaceholderMap.en;
+            }
+        }
+
         let currentMode = 'career';
         let currentExtractedData = { income: 10000, members: 4, grantPercentage: 0.5, loanEligible: true, loanScheme: "NLSFT (Non-Means-Tested Loan Scheme)" };
         let activeChatId = null;
@@ -585,6 +976,19 @@ UNIFIED_HTML_TEMPLATE = r"""
         let pendingChatIds = new Set(); // Tracks active AI generation per chat ID
 
         async function initApp() {
+            // Instantly lock on page reload / refresh (F5) on the very first reload
+            const navEntries = performance.getEntriesByType("navigation");
+            if (navEntries.length > 0 && navEntries[0].type === 'reload') {
+                window.location.replace('/api/logout');
+                return;
+            }
+
+            const savedLang = localStorage.getItem('boussole_lang') || 'en';
+            currentLang = savedLang;
+            const langSelect = document.getElementById('lang-select');
+            if (langSelect) langSelect.value = savedLang;
+            
+            changeLanguage(savedLang);
             await loadChats();
         }
 
@@ -689,11 +1093,14 @@ UNIFIED_HTML_TEMPLATE = r"""
 
         function switchView(mode) {
             currentMode = mode;
+            
+            const mobileSelect = document.getElementById('mobile-view-select');
+            if (mobileSelect) mobileSelect.value = mode;
+
             const careerView = document.getElementById('view-career');
             const jobView = document.getElementById('view-job');
             const copilotView = document.getElementById('view-copilot');
             const bridgeView = document.getElementById('view-bridge');
-            const brandSubtitle = document.getElementById('brand-subtitle');
             const sidebarActions = document.getElementById('sidebar-actions');
 
             const btnCareer = document.getElementById('btn-career');
@@ -701,10 +1108,10 @@ UNIFIED_HTML_TEMPLATE = r"""
             const btnCopilot = document.getElementById('btn-copilot');
             const btnBridge = document.getElementById('btn-bridge');
 
-            btnCareer.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm";
-            btnJob.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm";
-            btnCopilot.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm";
-            btnBridge.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 transition shadow-sm";
+            if (btnCareer) btnCareer.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm";
+            if (btnJob) btnJob.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm";
+            if (btnCopilot) btnCopilot.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm";
+            if (btnBridge) btnBridge.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 transition shadow-sm";
 
             careerView.classList.add('hidden');
             jobView.classList.add('hidden');
@@ -713,23 +1120,19 @@ UNIFIED_HTML_TEMPLATE = r"""
 
             if (mode === 'career') {
                 careerView.classList.remove('hidden');
-                brandSubtitle.innerText = 'Career Intelligence & Roadmapping';
-                btnCareer.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm";
+                if (btnCareer) btnCareer.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm";
                 if (sidebarActions) sidebarActions.classList.remove('hidden');
             } else if (mode === 'job') {
                 jobView.classList.remove('hidden');
-                brandSubtitle.innerText = 'Multi-Role Job Compatibility & History';
-                btnJob.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-600 text-white transition shadow-sm";
+                if (btnJob) btnJob.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-600 text-white transition shadow-sm";
                 if (sidebarActions) sidebarActions.classList.add('hidden');
             } else if (mode === 'copilot') {
                 copilotView.classList.remove('hidden');
-                brandSubtitle.innerText = 'Student Financial Aid & Compliance';
-                btnCopilot.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm";
+                if (btnCopilot) btnCopilot.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm";
                 if (sidebarActions) sidebarActions.classList.add('hidden');
             } else if (mode === 'bridge') {
                 bridgeView.classList.remove('hidden');
-                brandSubtitle.innerText = 'Grant-to-Career Livelihood Bridge';
-                btnBridge.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-purple-600 text-white transition shadow-sm";
+                if (btnBridge) btnBridge.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-purple-600 text-white transition shadow-sm";
                 if (sidebarActions) sidebarActions.classList.add('hidden');
             }
         }
@@ -752,14 +1155,15 @@ UNIFIED_HTML_TEMPLATE = r"""
             if (list.children.length >= 10) {
                 return alert("You can compare up to 10 roles simultaneously.");
             }
+            const t = translations[currentLang] || translations.en;
             const div = document.createElement('div');
             div.className = "job-input-item flex flex-col gap-1.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800";
             div.innerHTML = `
                 <div class="flex justify-between items-center">
-                    <input type="text" placeholder="Job Title (e.g. Data Scientist)" class="job-title-input w-full bg-slate-900 text-slate-100 text-xs rounded px-2.5 py-1.5 border border-slate-800 focus:outline-none focus:border-indigo-500">
+                    <input type="text" placeholder="${t.job_title_ph}" class="job-title-input w-full bg-slate-900 text-slate-100 text-xs rounded px-2.5 py-1.5 border border-slate-800 focus:outline-none focus:border-indigo-500">
                     <button onclick="this.parentElement.parentElement.remove()" class="text-rose-400 hover:text-rose-300 text-xs px-2 font-bold" title="Remove role">✕</button>
                 </div>
-                <textarea rows="2" placeholder="Paste job description here (optional)..." class="job-desc-input w-full bg-slate-900 text-slate-200 text-xs rounded p-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none"></textarea>
+                <textarea rows="2" placeholder="${t.job_desc_ph}" class="job-desc-input w-full bg-slate-900 text-slate-200 text-xs rounded p-2.5 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none"></textarea>
             `;
             list.appendChild(div);
         }
@@ -804,7 +1208,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 console.error(err);
             } finally {
                 btn.disabled = false;
-                btn.innerText = "✨ AI: Recommend Top Roles for My CV";
+                const t = translations[currentLang] || translations.en;
+                btn.innerText = t.job_recommend_btn;
             }
         }
 
@@ -931,7 +1336,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 console.error(err);
             } finally {
                 btn.disabled = false;
-                btn.innerText = "Calculate Multi-Job Compatibility ⚡";
+                const t = translations[currentLang] || translations.en;
+                btn.innerText = t.job_submit_btn;
             }
         }
 
@@ -1319,9 +1725,34 @@ UNIFIED_HTML_TEMPLATE = r"""
 # 3. ROUTING & API ENDPOINTS
 # ==============================================================================
 
+@app.before_request
+def protect_routes():
+    if request.endpoint in ('home', 'api_login', 'api_logout', 'static'):
+        return
+    if request.path.startswith('/api/') and not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
 @app.route('/')
 def home():
+    if not session.get('authenticated'):
+        return render_template_string(LOGIN_HTML_TEMPLATE)
     return render_template_string(UNIFIED_HTML_TEMPLATE)
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.json or {}
+    entered_password = data.get('password', '')
+    if entered_password == APP_PASSWORD:
+        session['authenticated'] = True
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error', 'message': 'Incorrect password. Please try again.'}), 401
+
+@app.route('/api/logout', methods=['GET', 'POST'])
+def api_logout():
+    session.pop('authenticated', None)
+    if request.method == 'POST':
+        return '', 204
+    return redirect(url_for('home'))
 
 @app.route('/api/chats', methods=['GET'])
 def list_chats():
@@ -1557,16 +1988,12 @@ def parse_resume():
         raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
         raw_lines = raw_text.split('\n')
         
-        # Filter non-empty lines
         non_empty_lines = [l.strip() for l in raw_lines if l.strip()]
         
-        # AUTO-DETECT: Check if the PDF suffers from the "one word per line" bug
-        # (Where over 40% of non-empty lines contain single words with no spaces)
         single_word_lines = sum(1 for l in non_empty_lines if ' ' not in l and len(l.split()) == 1)
         is_word_per_line = (len(non_empty_lines) > 0) and (single_word_lines / len(non_empty_lines) > 0.4)
         
         if is_word_per_line:
-            # Intelligent Word Stitcher for Fragmented PDFs
             reconstructed = []
             current_line = []
             for line in non_empty_lines:
@@ -1587,7 +2014,6 @@ def parse_resume():
                 reconstructed.append(" ".join(current_line))
             text = "\n".join(reconstructed)
         else:
-            # Standard multi-line paragraph cleaner
             blocks = re.split(r'\n\s*\n', raw_text)
             cleaned_blocks = []
             for block in blocks:
