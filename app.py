@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template_string, session
+from flask import Flask, request, jsonify, render_template_string
 from openai import OpenAI
 from pypdf import PdfReader
 
@@ -30,6 +30,38 @@ client = OpenAI(
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'boussole-ai-super-secret-key-2026')
+
+# ==============================================================================
+# SERVER-SIDE CHAT STORAGE
+# ==============================================================================
+
+BOUSSOLE_SYSTEM_INSTRUCTION = """
+You are Boussole AI, an elite, executive-level career navigation strategist and hackathon career advisor.
+Your mission is to help candidates navigate skill gaps, optimize resumes, master technical/behavioral interviews, and build structured career roadmaps.
+
+Core Operating Principles:
+1. Direct, Actionable Guidance: Cut generic fluff. Focus on clear execution steps.
+2. The Google X-Y-Z Formula: When rewriting resume bullets, enforce "Accomplished [X], as measured by [Y], by doing [Z]".
+3. Structure and Formatting: Utilize Markdown headers, bullet points, bold key terms, and code blocks where applicable.
+4. Voice & Tone: Empathetic yet candid, strategic, professional, and encouraging.
+5. Branding Identity: Always identify naturally as Boussole AI when introduced.
+6. Add new blank lines between every single paragraph to guarantee readability. Use double line breaks (\n\n) for spacing.
+7. Make paragraphs at least 3 lines per paragraph.
+"""
+
+WELCOME_GREETING = "Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?"
+
+CHAT_SESSIONS = {
+    "default": {
+        "id": "default",
+        "title": "New Conversation",
+        "messages": [
+            {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
+            {"role": "assistant", "content": WELCOME_GREETING}
+        ]
+    }
+}
+ACTIVE_SESSION_ID = "default"
 
 # ==============================================================================
 # 1. STUDENT FINANCIAL AID ENGINE (PDPO + DETERMINISTIC RULES + LOAN CALCULATOR)
@@ -122,25 +154,7 @@ def evaluate_student_eligibility(income: float, members: int) -> dict:
         }
 
 # ==============================================================================
-# 2. CAREER ADVISOR SYSTEM INSTRUCTION
-# ==============================================================================
-
-BOUSSOLE_SYSTEM_INSTRUCTION = """
-You are Boussole AI, an elite, executive-level career navigation strategist and hackathon career advisor.
-Your mission is to help candidates navigate skill gaps, optimize resumes, master technical/behavioral interviews, and build structured career roadmaps.
-
-Core Operating Principles:
-1. Direct, Actionable Guidance: Cut generic fluff. Focus on clear execution steps.
-2. The Google X-Y-Z Formula: When rewriting resume bullets, enforce "Accomplished [X], as measured by [Y], by doing [Z]".
-3. Structure and Formatting: Utilize Markdown headers, bullet points, bold key terms, and code blocks where applicable.
-4. Voice & Tone: Empathetic yet candid, strategic, professional, and encouraging.
-5. Branding Identity: Always identify naturally as Boussole AI when introduced.
-6. Add new blank lines between every single paragraph to guarantee readability. Use double line breaks (\\n\\n) for spacing.
-7. Make paragraphs at least 3 lines per paragraph.
-"""
-
-# ==============================================================================
-# 3. UNIFIED FRONTEND
+# 2. UNIFIED FRONTEND
 # ==============================================================================
 
 UNIFIED_HTML_TEMPLATE = r"""
@@ -164,7 +178,6 @@ UNIFIED_HTML_TEMPLATE = r"""
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
         @keyframes typingWave { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
         
-        /* Absolute boundary containment rules to prevent out-of-bounds text/font overflow */
         * {
             box-sizing: border-box;
             min-width: 0;
@@ -199,7 +212,7 @@ UNIFIED_HTML_TEMPLATE = r"""
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 h-[100dvh] flex flex-col justify-between selection:bg-cyan-500 selection:text-white overflow-hidden">
+<body class="bg-slate-950 text-slate-100 h-[100dvh] flex flex-col justify-between selection:bg-cyan-500 selection:text-white overflow-hidden" onload="initApp()">
 
     <!-- Top Navigation Bar -->
     <header class="border-b border-slate-800 bg-slate-900 sticky top-0 z-50 flex-shrink-0">
@@ -221,8 +234,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 <button onclick="switchView('career')" id="btn-career" class="text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm">
                     💼 Career Coach
                 </button>
-                <button onclick="switchView('ats')" id="btn-ats" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm">
-                    🎯 ATS Matcher
+                <button onclick="switchView('job')" id="btn-job" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm">
+                    🎯 Job Matcher
                 </button>
                 <button onclick="switchView('copilot')" id="btn-copilot" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm">
                     🏛 Financial Aid
@@ -240,7 +253,19 @@ UNIFIED_HTML_TEMPLATE = r"""
         <!-- VIEW 1: CAREER COACH (DEFAULT) -->
         <div id="view-career" class="flex-1 flex flex-col md:flex-row gap-4 h-full overflow-hidden">
             <!-- Sidebar controls -->
-            <aside class="w-full md:w-80 flex flex-col gap-3 flex-shrink-0 overflow-y-auto max-h-[160px] md:max-h-none custom-scrollbar">
+            <aside class="w-full md:w-80 flex flex-col gap-3 flex-shrink-0 overflow-y-auto max-h-[220px] md:max-h-none custom-scrollbar">
+                
+                <!-- New Chat & Chat History Panel -->
+                <div class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
+                    <div class="flex items-center justify-between px-1">
+                        <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Chat History</h2>
+                        <button onclick="createNewChat()" class="text-[11px] bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/30 font-semibold transition">+ New Chat</button>
+                    </div>
+                    <div id="chat-history-list" class="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                        <!-- Dynamic chat history items inserted here -->
+                    </div>
+                </div>
+
                 <div class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
                     <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1">Upload Resume (PDF/TXT)</h2>
                     <label for="pdf-file-input" class="cursor-pointer flex items-center justify-center p-3 border border-dashed border-slate-700 hover:border-cyan-500/50 rounded-xl bg-slate-900/40 transition text-center">
@@ -259,15 +284,15 @@ UNIFIED_HTML_TEMPLATE = r"""
                     </div>
                 </div>
 
-                <!-- Reset Chat & Export Chat Actions positioned at bottom of left sidebar -->
+                <!-- Chat Actions (Export & Delete Active Chat) -->
                 <div id="sidebar-actions" class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
                     <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1">Chat Actions</h2>
-                    <div class="grid grid-cols-2 md:grid-cols-1 gap-2">
-                        <button onclick="resetChat()" id="reset-btn" class="text-left p-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/80 text-rose-300 text-xs font-semibold transition flex items-center gap-1.5 truncate" title="Clear chat history and restart">
-                            🔄 Reset Chat
+                    <div class="grid grid-cols-1 gap-2">
+                        <button onclick="exportMarkdown()" id="export-btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Export conversation history">
+                            📥 Export Active Chat
                         </button>
-                        <button onclick="exportMarkdown()" id="export-btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold transition flex items-center gap-1.5 truncate" title="Export conversation history">
-                            📥 Export Chat
+                        <button onclick="deleteActiveChat()" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-rose-500/50 text-rose-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Delete active chat">
+                            🗑️ Delete Active Chat
                         </button>
                     </div>
                 </div>
@@ -276,16 +301,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             <!-- Chat Panel -->
             <section class="flex-1 glass-panel rounded-2xl flex flex-col overflow-hidden h-full min-w-0">
                 <div id="chat-stream" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-sm">
-                    <div class="flex items-start gap-3 w-full">
-                        <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold flex-shrink-0">B</div>
-                        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 text-slate-200 max-w-[85%] flex flex-col gap-2 overflow-hidden">
-                            <div class="ai-markdown-body">Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?</div>
-                            <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80 text-[11px]">
-                                <button onclick="copyToClipboard(this, 'Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">📋 Copy</button>
-                                <button data-speak-btn onclick="speakText(this, 'Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">🔊 Speak</button>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Dynamic chat messages loaded here -->
                 </div>
 
                 <div id="typing-indicator" class="hidden px-4 py-1.5 flex items-center gap-2 text-xs text-slate-400">
@@ -307,13 +323,13 @@ UNIFIED_HTML_TEMPLATE = r"""
             </section>
         </div>
 
-        <!-- VIEW 2: ATS MULTI-JOB COMPARISON & HISTORY PAGE -->
-        <div id="view-ats" class="hidden flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar p-1">
+        <!-- VIEW 2: MULTI-JOB COMPARISON & HISTORY PAGE -->
+        <div id="view-job" class="hidden flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar p-1">
             <div class="glass-panel rounded-2xl p-6 flex flex-col gap-5 max-w-5xl mx-auto w-full">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-lg">🎯</div>
                     <div>
-                        <h2 class="text-base font-bold text-white">Multi-Role ATS Compatibility & History Dashboard</h2>
+                        <h2 class="text-base font-bold text-white">Multi-Role Job Compatibility & History Dashboard</h2>
                         <p class="text-xs text-slate-400">Compare up to 10 roles simultaneously (descriptions optional). Use AI job recommendations based on your CV!</p>
                     </div>
                 </div>
@@ -325,15 +341,15 @@ UNIFIED_HTML_TEMPLATE = r"""
                         
                         <div class="flex flex-col gap-1.5">
                             <label class="text-xs font-semibold text-slate-300">Upload CV (PDF or TXT):</label>
-                            <label for="ats-file-input" class="cursor-pointer flex items-center justify-center p-3 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl bg-slate-950 transition text-center">
-                                <span id="ats-upload-status" class="text-xs text-slate-300 font-medium truncate">📎 Click to upload CV file</span>
+                            <label for="job-file-input" class="cursor-pointer flex items-center justify-center p-3 border border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl bg-slate-950 transition text-center">
+                                <span id="job-upload-status" class="text-xs text-slate-300 font-medium truncate">📎 Click to upload CV file</span>
                             </label>
-                            <input id="ats-file-input" type="file" accept=".pdf,.txt" class="hidden" onchange="handleAtsFileUpload(event)">
+                            <input id="job-file-input" type="file" accept=".pdf,.txt" class="hidden" onchange="handleJobFileUpload(event)">
                         </div>
 
                         <div class="flex flex-col gap-1.5">
                             <label class="text-xs font-semibold text-slate-300">Or Paste CV Text Content:</label>
-                            <textarea id="ats-cv-text" rows="4" class="w-full bg-slate-950 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none" placeholder="Paste your resume text here..."></textarea>
+                            <textarea id="job-cv-text" rows="4" class="w-full bg-slate-950 text-slate-200 text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-indigo-500 custom-scrollbar resize-none" placeholder="Paste your resume text here..."></textarea>
                         </div>
 
                         <!-- AI Job Recommendation Button -->
@@ -355,25 +371,25 @@ UNIFIED_HTML_TEMPLATE = r"""
                             </div>
                         </div>
 
-                        <button onclick="runAtsMatch()" id="ats-submit-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-indigo-600/20">
-                            Calculate Multi-Job ATS Compatibility ⚡
+                        <button onclick="runJobMatch()" id="job-submit-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-indigo-600/20">
+                            Calculate Multi-Job Compatibility ⚡
                         </button>
                     </div>
 
-                    <!-- Column B: History & Results Feed (Retains past analyses) -->
+                    <!-- Column B: History & Results Feed -->
                     <div class="flex flex-col gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800 overflow-y-auto custom-scrollbar max-h-[600px] md:max-h-none">
                         <div class="flex justify-between items-center">
                             <h3 class="text-xs font-bold text-cyan-400 uppercase tracking-wider">2. Compatibility History Feed</h3>
-                            <button onclick="clearAtsHistory()" class="text-[10px] text-slate-400 hover:text-rose-400 transition">Clear History</button>
+                            <button onclick="clearJobHistory()" class="text-[10px] text-slate-400 hover:text-rose-400 transition">Clear History</button>
                         </div>
                         
-                        <div id="ats-placeholder-state" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 text-xs gap-2 min-h-[280px]">
+                        <div id="job-placeholder-state" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 text-xs gap-2 min-h-[280px]">
                             <span class="text-3xl">📊</span>
                             <p>Awaiting CV and job input.<br>Past runs accumulate here so you can track improvements.</p>
                         </div>
 
-                        <div id="ats-history-container" class="flex flex-col gap-4">
-                            <!-- Dynamic comparison batches injected here without deleting old ones -->
+                        <div id="job-history-container" class="flex flex-col gap-4">
+                            <!-- Dynamic comparison batches injected here -->
                         </div>
                     </div>
                 </div>
@@ -453,7 +469,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                     </div>
                 </div>
 
-                <!-- Student Hardship Appeal Request (Standalone Card Outside Box 3) -->
+                <!-- Student Hardship Appeal Request -->
                 <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col gap-2">
                     <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider">⚠️ Request Special Hardship Review</span>
                     <p class="text-[11px] text-slate-400 leading-tight">Facing unexpected financial hardship or medical issues? Submit an appeal for human officer review.</p>
@@ -564,31 +580,134 @@ UNIFIED_HTML_TEMPLATE = r"""
     <script>
         let currentMode = 'career';
         let currentExtractedData = { income: 10000, members: 4, grantPercentage: 0.5, loanEligible: true, loanScheme: "NLSFT (Non-Means-Tested Loan Scheme)" };
-        let fullConversationLog = [];
+        let activeChatId = null;
         let uploadedResumeText = "";
+        let pendingChatIds = new Set(); // Tracks active AI generation per chat ID
+
+        async function initApp() {
+            await loadChats();
+        }
+
+        function updateTypingIndicator() {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (pendingChatIds.has(activeChatId)) {
+                typingIndicator.classList.remove('hidden');
+            } else {
+                typingIndicator.classList.add('hidden');
+            }
+        }
+
+        async function loadChats() {
+            try {
+                const res = await fetch('/api/chats');
+                const data = await res.json();
+                activeChatId = data.active_id;
+                renderChatHistoryList(data.chats, data.active_id);
+                renderMessages(data.messages);
+                updateTypingIndicator();
+            } catch (err) {
+                console.error("Failed to load chats", err);
+            }
+        }
+
+        function renderChatHistoryList(chats, activeId) {
+            const listEl = document.getElementById('chat-history-list');
+            listEl.innerHTML = '';
+            chats.forEach(chat => {
+                const isActive = chat.id === activeId;
+                const div = document.createElement('div');
+                div.className = `p-2 rounded-xl text-xs cursor-pointer transition truncate flex-shrink-0 ${isActive ? 'bg-cyan-600/25 border border-cyan-500/40 text-white font-semibold' : 'bg-slate-900/60 border border-slate-800 text-slate-300 hover:bg-slate-800/80'}`;
+                div.innerHTML = `<span class="truncate block pointer-events-none">${chat.title}</span>`;
+                div.onclick = () => switchChat(chat.id);
+                listEl.appendChild(div);
+            });
+        }
+
+        async function createNewChat() {
+            window.speechSynthesis.cancel();
+            const res = await fetch('/api/chats/new', { method: 'POST' });
+            await loadChats();
+        }
+
+        async function switchChat(chatId) {
+            window.speechSynthesis.cancel();
+            const res = await fetch('/api/chats/switch', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ chat_id: chatId })
+            });
+            const data = await res.json();
+            if (data.status === 'switched') {
+                activeChatId = data.active_id;
+                await loadChats();
+            }
+        }
+
+        async function deleteActiveChat() {
+            if (!confirm("Are you sure you want to delete this active chat conversation?")) return;
+            window.speechSynthesis.cancel();
+            const res = await fetch('/api/chats/active', { method: 'DELETE' });
+            const data = await res.json();
+            activeChatId = data.active_id;
+            renderChatHistoryList(data.chats, data.active_id);
+            renderMessages(data.messages);
+            updateTypingIndicator();
+        }
+
+        function renderMessages(messages) {
+            const chatStream = document.getElementById('chat-stream');
+            chatStream.innerHTML = '';
+            
+            if (!messages || messages.length === 0) {
+                return;
+            }
+
+            messages.forEach(msg => {
+                if (msg.role === 'user') {
+                    chatStream.innerHTML += `
+                        <div class="flex items-start justify-end gap-3 w-full">
+                            <div class="bg-cyan-600/90 rounded-2xl p-3.5 text-white max-w-[85%] break-words overflow-hidden">${msg.content}</div>
+                        </div>`;
+                } else if (msg.role === 'assistant') {
+                    const rawReplyForCopy = msg.content.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                    const cleanReplyForSpeech = stripMarkdownForSpeech(msg.content).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                    chatStream.innerHTML += `
+                        <div class="flex items-start gap-3 w-full">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold flex-shrink-0">B</div>
+                            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 text-slate-200 max-w-[85%] flex flex-col gap-2 overflow-hidden">
+                                <div class="ai-markdown-body">${marked.parse(msg.content)}</div>
+                                <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80 text-[11px]">
+                                    <button onclick="copyToClipboard(this, '${rawReplyForCopy}')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">📋 Copy</button>
+                                    <button data-speak-btn onclick="speakText(this, '${cleanReplyForSpeech}')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">🔊 Speak</button>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+            });
+            chatStream.scrollTop = chatStream.scrollHeight;
+        }
 
         function switchView(mode) {
             currentMode = mode;
             const careerView = document.getElementById('view-career');
-            const atsView = document.getElementById('view-ats');
+            const jobView = document.getElementById('view-job');
             const copilotView = document.getElementById('view-copilot');
             const bridgeView = document.getElementById('view-bridge');
             const brandSubtitle = document.getElementById('brand-subtitle');
             const sidebarActions = document.getElementById('sidebar-actions');
 
             const btnCareer = document.getElementById('btn-career');
-            const btnAts = document.getElementById('btn-ats');
+            const btnJob = document.getElementById('btn-job');
             const btnCopilot = document.getElementById('btn-copilot');
             const btnBridge = document.getElementById('btn-bridge');
 
-            // Reset buttons
             btnCareer.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm";
-            btnAts.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm";
+            btnJob.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition shadow-sm";
             btnCopilot.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shadow-sm";
             btnBridge.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 transition shadow-sm";
 
             careerView.classList.add('hidden');
-            atsView.classList.add('hidden');
+            jobView.classList.add('hidden');
             copilotView.classList.add('hidden');
             bridgeView.classList.add('hidden');
 
@@ -597,10 +716,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                 brandSubtitle.innerText = 'Career Intelligence & Roadmapping';
                 btnCareer.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-cyan-600 text-white transition shadow-sm";
                 if (sidebarActions) sidebarActions.classList.remove('hidden');
-            } else if (mode === 'ats') {
-                atsView.classList.remove('hidden');
-                brandSubtitle.innerText = 'Multi-Role ATS Compatibility & History';
-                btnAts.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-600 text-white transition shadow-sm";
+            } else if (mode === 'job') {
+                jobView.classList.remove('hidden');
+                brandSubtitle.innerText = 'Multi-Role Job Compatibility & History';
+                btnJob.className = "text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-600 text-white transition shadow-sm";
                 if (sidebarActions) sidebarActions.classList.add('hidden');
             } else if (mode === 'copilot') {
                 copilotView.classList.remove('hidden');
@@ -615,16 +734,16 @@ UNIFIED_HTML_TEMPLATE = r"""
             }
         }
 
-        async function handleAtsFileUpload(e) {
+        async function handleJobFileUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
-            document.getElementById('ats-upload-status').innerText = `✅ ${file.name}`;
+            document.getElementById('job-upload-status').innerText = `✅ ${file.name}`;
             const formData = new FormData();
             formData.append('file', file);
             const res = await fetch('/api/parse_resume', { method: 'POST', body: formData });
             const data = await res.json();
             if (data.text) {
-                document.getElementById('ats-cv-text').value = data.text;
+                document.getElementById('job-cv-text').value = data.text;
             }
         }
 
@@ -646,7 +765,7 @@ UNIFIED_HTML_TEMPLATE = r"""
         }
 
         async function recommendJobs() {
-            const cvText = document.getElementById('ats-cv-text').value.trim();
+            const cvText = document.getElementById('job-cv-text').value.trim();
             if (!cvText) {
                 return alert("Please upload or paste your CV text first so Boussole AI can analyze your background.");
             }
@@ -665,7 +784,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
                 if (data.recommended_jobs && data.recommended_jobs.length > 0) {
                     const list = document.getElementById('job-inputs-list');
-                    list.innerHTML = ''; // Clear existing input boxes
+                    list.innerHTML = '';
                     data.recommended_jobs.forEach(job => {
                         const div = document.createElement('div');
                         div.className = "job-input-item flex flex-col gap-1.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800";
@@ -678,7 +797,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                         `;
                         list.appendChild(div);
                     });
-                    runAtsMatch(); // Automatically calculate scores for recommended jobs!
+                    runJobMatch();
                 }
             } catch (err) {
                 alert("Error recommending jobs. Please try again.");
@@ -689,9 +808,9 @@ UNIFIED_HTML_TEMPLATE = r"""
             }
         }
 
-        function clearAtsHistory() {
-            document.getElementById('ats-history-container').innerHTML = '';
-            document.getElementById('ats-placeholder-state').classList.remove('hidden');
+        function clearJobHistory() {
+            document.getElementById('job-history-container').innerHTML = '';
+            document.getElementById('job-placeholder-state').classList.remove('hidden');
         }
 
         function toggleDropdown(headerEl) {
@@ -706,8 +825,8 @@ UNIFIED_HTML_TEMPLATE = r"""
             }
         }
 
-        async function runAtsMatch() {
-            const cvText = document.getElementById('ats-cv-text').value.trim();
+        async function runJobMatch() {
+            const cvText = document.getElementById('job-cv-text').value.trim();
             const items = document.querySelectorAll('.job-input-item');
             
             let jobEntries = [];
@@ -726,22 +845,21 @@ UNIFIED_HTML_TEMPLATE = r"""
                 return alert("Please provide your CV text (or upload a file) and at least one job title.");
             }
 
-            const btn = document.getElementById('ats-submit-btn');
+            const btn = document.getElementById('job-submit-btn');
             btn.disabled = true;
             btn.innerText = "Analyzing Multiple Roles...";
 
             try {
-                const res = await fetch('/api/ats_match', {
+                const res = await fetch('/api/job_match', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ cv_text: cvText, jobs: jobEntries })
                 });
                 const data = await res.json();
                 
-                document.getElementById('ats-placeholder-state').classList.add('hidden');
-                const historyContainer = document.getElementById('ats-history-container');
+                document.getElementById('job-placeholder-state').classList.add('hidden');
+                const historyContainer = document.getElementById('job-history-container');
 
-                // Create a comparison batch card and prepend so history is accumulated (not deleted)
                 const batchDiv = document.createElement('div');
                 batchDiv.className = "flex flex-col gap-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 shadow-sm";
                 
@@ -765,7 +883,6 @@ UNIFIED_HTML_TEMPLATE = r"""
 
                         htmlContent += `
                             <div class="rounded-lg bg-slate-900 border border-slate-800 overflow-hidden">
-                                <!-- Accordion Header -->
                                 <div onclick="toggleDropdown(this)" class="cursor-pointer p-3 flex items-center justify-between hover:bg-slate-850 transition">
                                     <div class="flex items-center gap-3">
                                         <div class="w-10 h-10 rounded-xl bg-${badgeColor}-600/20 text-${badgeColor}-400 border border-${badgeColor}-500/40 flex items-center justify-center font-bold text-sm flex-shrink-0">
@@ -782,8 +899,6 @@ UNIFIED_HTML_TEMPLATE = r"""
                                         </span>
                                     </div>
                                 </div>
-                                
-                                <!-- Accordion Dropdown Content -->
                                 <div class="hidden p-3 pt-0 border-t border-slate-800/80 flex flex-col gap-2.5 text-xs bg-slate-950/60 mt-2">
                                     <div class="pt-2">
                                         <span class="text-[10px] font-bold text-slate-400 uppercase">Match Summary</span>
@@ -812,44 +927,30 @@ UNIFIED_HTML_TEMPLATE = r"""
                 historyContainer.prepend(batchDiv);
 
             } catch (err) {
-                alert("Error running multi-job ATS analysis.");
+                alert("Error running multi-job analysis.");
                 console.error(err);
             } finally {
                 btn.disabled = false;
-                btn.innerText = "Calculate Multi-Job ATS Compatibility ⚡";
+                btn.innerText = "Calculate Multi-Job Compatibility ⚡";
             }
         }
 
         function exportMarkdown() {
-            if (fullConversationLog.length === 0) {
-                return alert("No conversation history to export yet.");
+            const chatStream = document.getElementById('chat-stream');
+            const messages = [];
+            chatStream.querySelectorAll('.flex').forEach(el => {
+                messages.push(el.innerText);
+            });
+            if (messages.length === 0) {
+                return alert("No active conversation to export yet.");
             }
-            const blob = new Blob([fullConversationLog.join("\n\n---\n\n")], { type: 'text/markdown' });
+            const blob = new Blob([messages.join("\n\n---\n\n")], { type: 'text/markdown' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = 'boussole-career-roadmap.md';
             a.click();
         }
 
-        async function resetChat() {
-            if (!confirm("Are you sure you want to reset the conversation?")) return;
-            window.speechSynthesis.cancel();
-            await fetch('/api/clear', { method: 'POST' });
-            fullConversationLog = [];
-            document.getElementById('chat-stream').innerHTML = `
-                <div class="flex items-start gap-3 w-full">
-                    <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold flex-shrink-0">B</div>
-                    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 text-slate-200 max-w-[85%] flex flex-col gap-2 overflow-hidden">
-                        <div class="ai-markdown-body">Chat reset successfully. How can I help you navigate your professional trajectory today?</div>
-                        <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80 text-[11px]">
-                            <button onclick="copyToClipboard(this, 'Chat reset successfully. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">📋 Copy</button>
-                            <button data-speak-btn onclick="speakText(this, 'Chat reset successfully. How can I help you navigate your professional trajectory today?')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">🔊 Speak</button>
-                        </div>
-                    </div>
-                </div>`;
-        }
-
-        // Copy AI Response to Clipboard
         function copyToClipboard(buttonElement, textToCopy) {
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalText = buttonElement.innerHTML;
@@ -862,7 +963,6 @@ UNIFIED_HTML_TEMPLATE = r"""
             });
         }
 
-        // Text-to-Speech Voice Output Utilities
         function stripMarkdownForSpeech(text) {
             return text
                 .replace(/```[\s\S]*?```/g, 'code block omitted')
@@ -899,7 +999,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
             utterance.onstart = () => {
                 buttonElement.dataset.speaking = 'true';
-                buttonElement.innerHTML = '⏹️️ Stop';
+                buttonElement.innerHTML = '⏹ Stop';
             };
 
             utterance.onend = () => {
@@ -915,11 +1015,9 @@ UNIFIED_HTML_TEMPLATE = r"""
             window.speechSynthesis.speak(utterance);
         }
 
-        // Career Coach Chat & Smart Playbooks Logic
         const chatStream = document.getElementById('chat-stream');
         const chatForm = document.getElementById('chat-form');
         const userInput = document.getElementById('user-input');
-        const typingIndicator = document.getElementById('typing-indicator');
 
         userInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -958,7 +1056,8 @@ UNIFIED_HTML_TEMPLATE = r"""
             const data = await res.json();
             if (data.text) {
                 uploadedResumeText = data.text;
-                userInput.value = `Successfully parsed resume (${file.name}). Click '🔥 Resume Roast' or ask me anything about your career path!`;
+                userInput.value = data.text;
+                userInput.focus();
             }
         }
 
@@ -972,47 +1071,48 @@ UNIFIED_HTML_TEMPLATE = r"""
             }
 
             userInput.value = '';
+            const sendingChatId = activeChatId;
 
-            chatStream.innerHTML += `
-                <div class="flex items-start justify-end gap-3 w-full">
-                    <div class="bg-cyan-600/90 rounded-2xl p-3.5 text-white max-w-[85%] break-words overflow-hidden">${text}</div>
-                </div>`;
-            chatStream.scrollTop = chatStream.scrollHeight;
-            typingIndicator.classList.remove('hidden');
+            pendingChatIds.add(sendingChatId);
+
+            if (activeChatId === sendingChatId) {
+                chatStream.innerHTML += `
+                    <div class="flex items-start justify-end gap-3 w-full">
+                        <div class="bg-cyan-600/90 rounded-2xl p-3.5 text-white max-w-[85%] break-words overflow-hidden">${text}</div>
+                    </div>`;
+                chatStream.scrollTop = chatStream.scrollHeight;
+                updateTypingIndicator();
+            }
 
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: text })
+                    body: JSON.stringify({ message: text, chat_id: sendingChatId })
                 });
                 const data = await response.json();
-                typingIndicator.classList.add('hidden');
 
-                if (data.reply) {
-                    fullConversationLog.push(`**User:** ${text}\n\n**Boussole AI:** ${data.reply}`);
-                    const rawReplyForCopy = data.reply.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
-                    const cleanReplyForSpeech = stripMarkdownForSpeech(data.reply).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
-                    chatStream.innerHTML += `
-                        <div class="flex items-start gap-3 w-full">
-                            <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold flex-shrink-0">B</div>
-                            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 text-slate-200 max-w-[85%] flex flex-col gap-2 overflow-hidden">
-                                <div class="ai-markdown-body">${marked.parse(data.reply)}</div>
-                                <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80 text-[11px]">
-                                    <button onclick="copyToClipboard(this, '${rawReplyForCopy}')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">📋 Copy</button>
-                                    <button data-speak-btn onclick="speakText(this, '${cleanReplyForSpeech}')" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 font-medium transition">🔊 Speak</button>
-                                </div>
-                            </div>
-                        </div>`;
+                pendingChatIds.delete(sendingChatId);
+
+                if (activeChatId === sendingChatId) {
+                    updateTypingIndicator();
+                    if (data.reply) {
+                        await loadChats();
+                    }
+                } else {
+                    const resChats = await fetch('/api/chats');
+                    const chatListData = await resChats.json();
+                    renderChatHistoryList(chatListData.chats, activeChatId);
                 }
             } catch (err) {
-                typingIndicator.classList.add('hidden');
-                alert("Network error connecting to AI backend.");
+                pendingChatIds.delete(sendingChatId);
+                if (activeChatId === sendingChatId) {
+                    updateTypingIndicator();
+                }
+                console.error("Network error connecting to AI backend.", err);
             }
-            chatStream.scrollTop = chatStream.scrollHeight;
         };
 
-        // Copilot Scenarios Logic
         const scenarios = {
             full_grant: "Student: Chan Tai Man (HKID: A123456(7), Phone: 91234567).\nApplied for FASP.\nFamily size: 4 members.\nFamily monthly income: HKD $10,000.",
             partial_grant: "Student: Wong Ka Ho (HKID: B234567(8), Phone: 61234567).\nApplied for FASP.\nFamily size: 4 members.\nFamily monthly income: HKD $18,000.",
@@ -1216,14 +1316,86 @@ UNIFIED_HTML_TEMPLATE = r"""
 """
 
 # ==============================================================================
-# 4. ROUTING & API ENDPOINTS
+# 3. ROUTING & API ENDPOINTS
 # ==============================================================================
 
 @app.route('/')
 def home():
-    if 'messages' not in session:
-        session['messages'] = [{"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION}]
     return render_template_string(UNIFIED_HTML_TEMPLATE)
+
+@app.route('/api/chats', methods=['GET'])
+def list_chats():
+    global ACTIVE_SESSION_ID
+    if ACTIVE_SESSION_ID not in CHAT_SESSIONS:
+        ACTIVE_SESSION_ID = list(CHAT_SESSIONS.keys())[0]
+    chats_summary = [
+        {"id": c["id"], "title": c["title"]}
+        for c in CHAT_SESSIONS.values()
+    ]
+    active_messages = [m for m in CHAT_SESSIONS[ACTIVE_SESSION_ID]["messages"] if m["role"] != "system"]
+    return jsonify({
+        "active_id": ACTIVE_SESSION_ID,
+        "chats": chats_summary,
+        "messages": active_messages
+    })
+
+@app.route('/api/chats/new', methods=['POST'])
+def new_chat():
+    global ACTIVE_SESSION_ID
+    chat_id = datetime.now().strftime('%Y%m%d%H%M%S_%f')
+    CHAT_SESSIONS[chat_id] = {
+        "id": chat_id,
+        "title": "New Conversation",
+        "messages": [
+            {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
+            {"role": "assistant", "content": WELCOME_GREETING}
+        ]
+    }
+    ACTIVE_SESSION_ID = chat_id
+    return jsonify({
+        "chat_id": chat_id, 
+        "title": "New Conversation", 
+        "messages": [{"role": "assistant", "content": WELCOME_GREETING}]
+    })
+
+@app.route('/api/chats/switch', methods=['POST'])
+def switch_chat():
+    global ACTIVE_SESSION_ID
+    data = request.json
+    chat_id = data.get('chat_id')
+    if chat_id in CHAT_SESSIONS:
+        ACTIVE_SESSION_ID = chat_id
+        messages = [m for m in CHAT_SESSIONS[chat_id]["messages"] if m["role"] != "system"]
+        return jsonify({"status": "switched", "active_id": chat_id, "messages": messages})
+    return jsonify({"error": "Chat not found"}), 404
+
+@app.route('/api/chats/active', methods=['DELETE'])
+def delete_active_chat():
+    global ACTIVE_SESSION_ID
+    if len(CHAT_SESSIONS) <= 1:
+        CHAT_SESSIONS[ACTIVE_SESSION_ID] = {
+            "id": ACTIVE_SESSION_ID,
+            "title": "New Conversation",
+            "messages": [
+                {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
+                {"role": "assistant", "content": WELCOME_GREETING}
+            ]
+        }
+    else:
+        del CHAT_SESSIONS[ACTIVE_SESSION_ID]
+        ACTIVE_SESSION_ID = list(CHAT_SESSIONS.keys())[0]
+    
+    chats_summary = [
+        {"id": c["id"], "title": c["title"]}
+        for c in CHAT_SESSIONS.values()
+    ]
+    active_messages = [m for m in CHAT_SESSIONS[ACTIVE_SESSION_ID]["messages"] if m["role"] != "system"]
+    return jsonify({
+        "status": "deleted",
+        "active_id": ACTIVE_SESSION_ID,
+        "chats": chats_summary,
+        "messages": active_messages
+    })
 
 @app.route('/api/evaluate_case', methods=['POST'])
 def evaluate_case():
@@ -1279,8 +1451,8 @@ def recommend_jobs():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/ats_match', methods=['POST'])
-def ats_match():
+@app.route('/api/job_match', methods=['POST'])
+def job_match():
     data = request.json
     cv_text = data.get('cv_text', '').strip()
     jobs = data.get('jobs', [])
@@ -1289,7 +1461,7 @@ def ats_match():
         return jsonify({'error': 'CV text and at least one target job title are required.'}), 400
 
     prompt = f"""
-    You are an expert ATS (Applicant Tracking System) recruiter and resume optimization engine.
+    You are an expert recruiter and resume optimization engine.
     Analyze the candidate's CV against each of the target jobs provided below. Note that for some jobs, a formal description might be missing or minimal; in those cases, evaluate based on standard industry expectations and core skill requirements for the specified job title.
     
     Candidate CV Content:
@@ -1300,7 +1472,7 @@ def ats_match():
     
     Provide your response in strict JSON format with a single key "results" containing an array of objects. Each object must correspond to a job in order and have:
     - "job_title": string (the title provided or inferred)
-    - "score": integer between 0 and 100 representing the ATS match percentage.
+    - "score": integer between 0 and 100 representing the match percentage.
     - "match_summary": short executive summary of why it matches or doesn't match the role.
     - "matched_keywords": list of string keywords/skills found in both the CV and job expectations.
     - "missing_keywords": list of key technical or domain terms expected for this role but missing from the CV.
@@ -1321,22 +1493,47 @@ def ats_match():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    user_msg = request.json.get('message', '').strip()
+    global ACTIVE_SESSION_ID
+    data = request.json
+    user_msg = data.get('message', '').strip()
+    chat_id = data.get('chat_id') or ACTIVE_SESSION_ID
+
     if not user_msg:
         return jsonify({'error': 'Message required.'}), 400
 
-    if 'messages' not in session:
-        session['messages'] = [{"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION}]
+    if chat_id not in CHAT_SESSIONS:
+        chat_id = ACTIVE_SESSION_ID
+    if chat_id not in CHAT_SESSIONS:
+        chat_id = list(CHAT_SESSIONS.keys())[0]
 
-    messages = session['messages']
+    chat_obj = CHAT_SESSIONS[chat_id]
+    messages = chat_obj["messages"]
+
+    # AI-Generated Chat Title on First Message
+    if chat_obj["title"] == "New Conversation":
+        try:
+            title_prompt = [
+                {"role": "system", "content": "Generate a short, concise title (max 5 words, no quotes, no periods) that summarizes this chat topic."},
+                {"role": "user", "content": user_msg}
+            ]
+            title_res = client.chat.completions.create(
+                model=deployment_name,
+                messages=title_prompt
+            )
+            ai_title = title_res.choices[0].message.content.strip().strip('"\'')
+            if ai_title:
+                chat_obj["title"] = ai_title
+        except Exception as e:
+            print(f"Title generation failed: {e}")
+            chat_obj["title"] = (user_msg[:25] + '...') if len(user_msg) > 25 else user_msg
+
     messages.append({"role": "user", "content": user_msg})
 
     try:
         response = client.chat.completions.create(model=deployment_name, messages=messages)
         reply = response.choices[0].message.content
         messages.append({"role": "assistant", "content": reply})
-        session['messages'] = messages
-        return jsonify({'reply': reply})
+        return jsonify({'reply': reply, 'title': chat_obj["title"], 'chat_id': chat_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1350,19 +1547,59 @@ def parse_resume():
     try:
         if filename.endswith('.pdf'):
             reader = PdfReader(io.BytesIO(file.read()))
-            text = "\n".join([page.extract_text() or "" for page in reader.pages])
+            raw_text = "\n".join([page.extract_text() or "" for page in reader.pages])
         elif filename.endswith('.txt'):
-            text = file.read().decode('utf-8')
+            raw_text = file.read().decode('utf-8', errors='ignore')
         else:
             return jsonify({'error': 'Unsupported file format.'}), 400
+        
+        # Normalize line endings
+        raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
+        raw_lines = raw_text.split('\n')
+        
+        # Filter non-empty lines
+        non_empty_lines = [l.strip() for l in raw_lines if l.strip()]
+        
+        # AUTO-DETECT: Check if the PDF suffers from the "one word per line" bug
+        # (Where over 40% of non-empty lines contain single words with no spaces)
+        single_word_lines = sum(1 for l in non_empty_lines if ' ' not in l and len(l.split()) == 1)
+        is_word_per_line = (len(non_empty_lines) > 0) and (single_word_lines / len(non_empty_lines) > 0.4)
+        
+        if is_word_per_line:
+            # Intelligent Word Stitcher for Fragmented PDFs
+            reconstructed = []
+            current_line = []
+            for line in non_empty_lines:
+                is_bullet = line.startswith(('•', '-', '*', '◦', '▪'))
+                is_header = line.isupper() and len(line) < 25 and len(line.split()) <= 3
+                
+                if is_bullet or is_header:
+                    if current_line:
+                        reconstructed.append(" ".join(current_line))
+                        current_line = []
+                    reconstructed.append(line)
+                else:
+                    current_line.append(line)
+                    if line.endswith(('.', ';', ':')) and len(current_line) >= 8:
+                        reconstructed.append(" ".join(current_line))
+                        current_line = []
+            if current_line:
+                reconstructed.append(" ".join(current_line))
+            text = "\n".join(reconstructed)
+        else:
+            # Standard multi-line paragraph cleaner
+            blocks = re.split(r'\n\s*\n', raw_text)
+            cleaned_blocks = []
+            for block in blocks:
+                flat_block = re.sub(r'[ \t]+\n[ \t]*', ' ', block)
+                flat_block = re.sub(r'[ \t]+', ' ', flat_block).strip()
+                if flat_block:
+                    cleaned_blocks.append(flat_block)
+            text = '\n\n'.join(cleaned_blocks)
+
         return jsonify({'text': text.strip()})
     except Exception as e:
         return jsonify({'error': f'Failed to parse file: {str(e)}'}), 500
-
-@app.route('/api/clear', methods=['POST'])
-def clear_chat():
-    session['messages'] = [{"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION}]
-    return jsonify({'status': 'cleared'})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
