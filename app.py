@@ -33,36 +33,60 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'boussole-ai-super-secret-key-2026')
 
 # ==============================================================================
-# SERVER-SIDE CHAT STORAGE
+# SERVER-SIDE JSON FILE CHAT STORAGE (Bypasses 4KB Cookie Limit)
 # ==============================================================================
 
+STORAGE_FILE = Path(__file__).resolve().parent / 'chat_storage.json'
+
 BOUSSOLE_SYSTEM_INSTRUCTION = """
-You are Boussole AI, an elite, executive-level career navigation strategist and hackathon career advisor.
-Your mission is to help candidates navigate skill gaps, optimize resumes, master technical/behavioral interviews, and build structured career roadmaps.
+You are Boussole AI, an elite career navigation strategist and hackathon career advisor.
+Your mission is to provide concise, direct, and actionable guidance to help candidates navigate skill gaps, optimize resumes, and master interviews.
 
 Core Operating Principles:
-1. Direct, Actionable Guidance: Cut generic fluff. Focus on clear execution steps.
-2. The Google X-Y-Z Formula: When rewriting resume bullets, enforce "Accomplished [X], as measured by [Y], by doing [Z]".
-3. Structure and Formatting: Utilize Markdown headers, bullet points, bold key terms, and code blocks where applicable.
-4. Voice & Tone: Empathetic yet candid, strategic, professional, and encouraging.
-5. Branding Identity: Always identify naturally as Boussole AI when introduced.
-6. Add new blank lines between every single paragraph to guarantee readability. Use double line breaks (\n\n) for spacing.
-7. Make paragraphs at least 3 lines per paragraph.
+1. Extreme Conciseness: Keep answers short, punchy, and straight to the point. Avoid fluff, long introductions, or unnecessary elaboration. 
+2. Format: Use short bullet points and brief sentences. Never write long, dense paragraphs or excessive text.
+3. The Google X-Y-Z Formula: When rewriting resume bullets, enforce "Accomplished [X], as measured by [Y], by doing [Z]".
+4. Voice & Tone: Professional, candid, and encouraging, but brief.
+5. Branding Identity: Identify naturally as Boussole AI when introduced.
 """
 
 WELCOME_GREETING = "Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?"
 
-CHAT_SESSIONS = {
-    "default": {
-        "id": "default",
-        "title": "New Conversation",
-        "messages": [
-            {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
-            {"role": "assistant", "content": WELCOME_GREETING}
-        ]
+def load_storage():
+    """Loads chat sessions and active ID from server-side JSON storage."""
+    if STORAGE_FILE.exists():
+        try:
+            with open(STORAGE_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                sessions = data.get('sessions', {})
+                active_id = data.get('active_id', 'default')
+                if sessions:
+                    return sessions, active_id
+        except Exception as e:
+            print(f"Error loading chat storage: {e}")
+    
+    # Default initial state
+    default_id = "default"
+    default_sessions = {
+        default_id: {
+            "id": default_id,
+            "title": "New Conversation",
+            "messages": [
+                {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
+                {"role": "assistant", "content": WELCOME_GREETING}
+            ]
+        }
     }
-}
-ACTIVE_SESSION_ID = "default"
+    save_storage(default_sessions, default_id)
+    return default_sessions, default_id
+
+def save_storage(sessions, active_id):
+    """Saves chat sessions and active ID to server-side JSON storage."""
+    try:
+        with open(STORAGE_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'sessions': sessions, 'active_id': active_id}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving chat storage: {e}")
 
 # ==============================================================================
 # 1. STUDENT FINANCIAL AID ENGINE (PDPO + DETERMINISTIC RULES + LOAN CALCULATOR)
@@ -360,15 +384,18 @@ UNIFIED_HTML_TEMPLATE = r"""
                     </div>
                 </div>
 
-                <!-- Chat Actions (Export & Delete Active Chat) -->
+                <!-- Chat Actions (Export, Delete Current & Delete All Chat History) -->
                 <div id="sidebar-actions" class="glass-panel rounded-2xl p-3 flex flex-col gap-2">
                     <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1" data-i18n="chat_actions_title">Chat Actions</h2>
                     <div class="grid grid-cols-1 gap-2">
                         <button onclick="exportMarkdown()" id="export-btn" data-i18n="export_btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Export conversation history">
-                            📥 Export Active Chat
+                            📥 Export Current Chat
                         </button>
-                        <button onclick="deleteActiveChat()" data-i18n="delete_btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-rose-500/50 text-rose-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Delete active chat">
-                            🗑️ Delete Active Chat
+                        <button onclick="deleteActiveChat()" data-i18n="delete_btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-rose-500/50 text-rose-300 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Delete current chat">
+                            🗑️ Delete Current Chat
+                        </button>
+                        <button onclick="clearAllChats()" data-i18n="delete_all_btn" class="text-left p-2 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-rose-600/50 text-rose-400 text-xs font-semibold transition flex items-center justify-center gap-1.5 truncate" title="Delete all conversation history">
+                            🗑️ Delete Chat History
                         </button>
                     </div>
                 </div>
@@ -547,7 +574,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
                 <!-- Student Hardship Appeal Request -->
                 <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-col gap-2.5">
-                    <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider" data-i18n="copilot_appeal_title">⚠️️ Request Special Hardship Review</span>
+                    <span class="text-[10px] uppercase font-bold text-amber-400 tracking-wider" data-i18n="copilot_appeal_title">⚠️ Request Special Hardship Review</span>
                     <p class="text-[11px] text-slate-400 leading-tight" data-i18n="copilot_appeal_desc">Facing unexpected financial hardship or medical issues? Submit an appeal for human officer review.</p>
                     <select id="override-reason" class="w-full bg-slate-950 text-slate-200 text-xs rounded-lg p-2.5 border border-slate-800 outline-none">
                         <option value="" data-i18n="copilot_appeal_default">Select your special circumstance...</option>
@@ -671,8 +698,9 @@ UNIFIED_HTML_TEMPLATE = r"""
                 preset_behavioral: "🎙️ Interview Drill",
                 preset_roadmap: "🗺️ 90-Day Roadmap",
                 chat_actions_title: "Chat Actions",
-                export_btn: "📥 Export Active Chat",
-                delete_btn: "🗑️ Delete Active Chat",
+                export_btn: "📥 Export Current Chat",
+                delete_btn: "🗑️ Delete Current Chat",
+                delete_all_btn: "🗑️ Delete Chat History",
                 chat_placeholder: "Ask Boussole AI or select a playbook above...",
                 send_btn: "Send",
                 tip_enter: "💡 Tip: Press Enter to send, Shift + Enter for a new line.",
@@ -763,6 +791,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_actions_title: "對話操作",
                 export_btn: "📥 匯出當前對話",
                 delete_btn: "🗑 刪除當前對話",
+                delete_all_btn: "🗑️ 刪除全部對話紀錄",
                 chat_placeholder: "向 Boussole AI 提問或選擇上方錦囊...",
                 send_btn: "發送",
                 tip_enter: "💡 提示：按 Enter 發送，Shift + Enter 換行。",
@@ -853,6 +882,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_actions_title: "对话操作",
                 export_btn: "📥 导出当前对话",
                 delete_btn: "🗑️ 删除当前对话",
+                delete_all_btn: "🗑️ 删除全部对话记录",
                 chat_placeholder: "向 Boussole AI 提问或选择上方锦囊...",
                 send_btn: "发送",
                 tip_enter: "💡 提示：按 Enter 发送，Shift + Enter 换行。",
@@ -976,7 +1006,6 @@ UNIFIED_HTML_TEMPLATE = r"""
         let pendingChatIds = new Set(); // Tracks active AI generation per chat ID
 
         async function initApp() {
-            // Instantly lock on page reload / refresh (F5) on the very first reload
             const navEntries = performance.getEntriesByType("navigation");
             if (navEntries.length > 0 && navEntries[0].type === 'reload') {
                 window.location.replace('/api/logout');
@@ -1048,9 +1077,20 @@ UNIFIED_HTML_TEMPLATE = r"""
         }
 
         async function deleteActiveChat() {
-            if (!confirm("Are you sure you want to delete this active chat conversation?")) return;
+            if (!confirm("Are you sure you want to delete this current chat conversation?")) return;
             window.speechSynthesis.cancel();
             const res = await fetch('/api/chats/active', { method: 'DELETE' });
+            const data = await res.json();
+            activeChatId = data.active_id;
+            renderChatHistoryList(data.chats, data.active_id);
+            renderMessages(data.messages);
+            updateTypingIndicator();
+        }
+
+        async function clearAllChats() {
+            if (!confirm("Are you sure you want to delete all chat history? This will clear all conversations and start a new one.")) return;
+            window.speechSynthesis.cancel();
+            const res = await fetch('/api/chats/clear', { method: 'DELETE' });
             const data = await res.json();
             activeChatId = data.active_id;
             renderChatHistoryList(data.chats, data.active_id);
@@ -1437,6 +1477,8 @@ UNIFIED_HTML_TEMPLATE = r"""
             if (type === 'roast') {
                 if (uploadedResumeText) {
                     promptText = `Please perform a rigorous Resume Roast on my uploaded resume using the Google X-Y-Z formula ("Accomplished [X], as measured by [Y], by doing [Z]"): \n\n${uploadedResumeText}`;
+                    uploadedResumeText = ""; 
+                    document.getElementById('upload-status-text').innerText = "📎 Click to attach resume";
                 } else {
                     promptText = "Please perform a Resume Roast. (Tip: You can also upload your PDF resume using the sidebar attachment button!). Here are my general experience bullets to review:";
                 }
@@ -1474,6 +1516,8 @@ UNIFIED_HTML_TEMPLATE = r"""
 
             if (uploadedResumeText && !text.includes(uploadedResumeText)) {
                 text = `Here is my resume context:\n${uploadedResumeText}\n\nUser Request: ${text}`;
+                uploadedResumeText = ""; 
+                document.getElementById('upload-status-text').innerText = "📎 Click to attach resume";
             }
 
             userInput.value = '';
@@ -1504,6 +1548,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                     updateTypingIndicator();
                     if (data.reply) {
                         await loadChats();
+                    } else if (data.error) {
+                        alert("AI Error: " + data.error);
                     }
                 } else {
                     const resChats = await fetch('/api/chats');
@@ -1515,7 +1561,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 if (activeChatId === sendingChatId) {
                     updateTypingIndicator();
                 }
-                console.error("Network error connecting to AI backend.", err);
+                alert("Network error connecting to AI backend.");
+                console.error(err);
             }
         };
 
@@ -1756,25 +1803,26 @@ def api_logout():
 
 @app.route('/api/chats', methods=['GET'])
 def list_chats():
-    global ACTIVE_SESSION_ID
-    if ACTIVE_SESSION_ID not in CHAT_SESSIONS:
-        ACTIVE_SESSION_ID = list(CHAT_SESSIONS.keys())[0]
+    sessions, active_id = load_storage()
+    if active_id not in sessions:
+        active_id = list(sessions.keys())[0]
+    
     chats_summary = [
         {"id": c["id"], "title": c["title"]}
-        for c in CHAT_SESSIONS.values()
+        for c in sessions.values()
     ]
-    active_messages = [m for m in CHAT_SESSIONS[ACTIVE_SESSION_ID]["messages"] if m["role"] != "system"]
+    active_messages = [m for m in sessions[active_id]["messages"] if m["role"] != "system"]
     return jsonify({
-        "active_id": ACTIVE_SESSION_ID,
+        "active_id": active_id,
         "chats": chats_summary,
         "messages": active_messages
     })
 
 @app.route('/api/chats/new', methods=['POST'])
 def new_chat():
-    global ACTIVE_SESSION_ID
+    sessions, _ = load_storage()
     chat_id = datetime.now().strftime('%Y%m%d%H%M%S_%f')
-    CHAT_SESSIONS[chat_id] = {
+    sessions[chat_id] = {
         "id": chat_id,
         "title": "New Conversation",
         "messages": [
@@ -1782,7 +1830,8 @@ def new_chat():
             {"role": "assistant", "content": WELCOME_GREETING}
         ]
     }
-    ACTIVE_SESSION_ID = chat_id
+    save_storage(sessions, chat_id)
+
     return jsonify({
         "chat_id": chat_id, 
         "title": "New Conversation", 
@@ -1791,21 +1840,21 @@ def new_chat():
 
 @app.route('/api/chats/switch', methods=['POST'])
 def switch_chat():
-    global ACTIVE_SESSION_ID
+    sessions, _ = load_storage()
     data = request.json
     chat_id = data.get('chat_id')
-    if chat_id in CHAT_SESSIONS:
-        ACTIVE_SESSION_ID = chat_id
-        messages = [m for m in CHAT_SESSIONS[chat_id]["messages"] if m["role"] != "system"]
+    if chat_id in sessions:
+        save_storage(sessions, chat_id)
+        messages = [m for m in sessions[chat_id]["messages"] if m["role"] != "system"]
         return jsonify({"status": "switched", "active_id": chat_id, "messages": messages})
     return jsonify({"error": "Chat not found"}), 404
 
 @app.route('/api/chats/active', methods=['DELETE'])
 def delete_active_chat():
-    global ACTIVE_SESSION_ID
-    if len(CHAT_SESSIONS) <= 1:
-        CHAT_SESSIONS[ACTIVE_SESSION_ID] = {
-            "id": ACTIVE_SESSION_ID,
+    sessions, active_id = load_storage()
+    if len(sessions) <= 1:
+        sessions[active_id] = {
+            "id": active_id,
             "title": "New Conversation",
             "messages": [
                 {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
@@ -1813,17 +1862,42 @@ def delete_active_chat():
             ]
         }
     else:
-        del CHAT_SESSIONS[ACTIVE_SESSION_ID]
-        ACTIVE_SESSION_ID = list(CHAT_SESSIONS.keys())[0]
+        del sessions[active_id]
+        active_id = list(sessions.keys())[0]
     
+    save_storage(sessions, active_id)
+
     chats_summary = [
         {"id": c["id"], "title": c["title"]}
-        for c in CHAT_SESSIONS.values()
+        for c in sessions.values()
     ]
-    active_messages = [m for m in CHAT_SESSIONS[ACTIVE_SESSION_ID]["messages"] if m["role"] != "system"]
+    active_messages = [m for m in sessions[active_id]["messages"] if m["role"] != "system"]
     return jsonify({
         "status": "deleted",
-        "active_id": ACTIVE_SESSION_ID,
+        "active_id": active_id,
+        "chats": chats_summary,
+        "messages": active_messages
+    })
+
+@app.route('/api/chats/clear', methods=['DELETE'])
+def clear_all_chats():
+    default_id = "default"
+    default_sessions = {
+        default_id: {
+            "id": default_id,
+            "title": "New Conversation",
+            "messages": [
+                {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
+                {"role": "assistant", "content": WELCOME_GREETING}
+            ]
+        }
+    }
+    save_storage(default_sessions, default_id)
+    chats_summary = [{"id": default_id, "title": "New Conversation"}]
+    active_messages = [{"role": "assistant", "content": WELCOME_GREETING}]
+    return jsonify({
+        "status": "cleared",
+        "active_id": default_id,
         "chats": chats_summary,
         "messages": active_messages
     })
@@ -1924,20 +1998,20 @@ def job_match():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    global ACTIVE_SESSION_ID
+    sessions, active_id = load_storage()
     data = request.json
     user_msg = data.get('message', '').strip()
-    chat_id = data.get('chat_id') or ACTIVE_SESSION_ID
+    chat_id = data.get('chat_id') or active_id
 
     if not user_msg:
         return jsonify({'error': 'Message required.'}), 400
 
-    if chat_id not in CHAT_SESSIONS:
-        chat_id = ACTIVE_SESSION_ID
-    if chat_id not in CHAT_SESSIONS:
-        chat_id = list(CHAT_SESSIONS.keys())[0]
+    if chat_id not in sessions:
+        chat_id = active_id
+    if chat_id not in sessions:
+        chat_id = list(sessions.keys())[0]
 
-    chat_obj = CHAT_SESSIONS[chat_id]
+    chat_obj = sessions[chat_id]
     messages = chat_obj["messages"]
 
     # AI-Generated Chat Title on First Message
@@ -1961,9 +2035,15 @@ def chat():
     messages.append({"role": "user", "content": user_msg})
 
     try:
-        response = client.chat.completions.create(model=deployment_name, messages=messages)
+        response = client.chat.completions.create(
+            model=deployment_name, 
+            messages=messages
+        )
         reply = response.choices[0].message.content
         messages.append({"role": "assistant", "content": reply})
+        
+        save_storage(sessions, chat_id)
+        
         return jsonify({'reply': reply, 'title': chat_obj["title"], 'chat_id': chat_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
