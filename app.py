@@ -1088,11 +1088,16 @@ UNIFIED_HTML_TEMPLATE = r"""
                             <div class="bg-gradient-to-r from-slate-900 to-indigo-900 dark:from-slate-800 dark:to-indigo-950 border border-transparent dark:border-slate-700/60 rounded-2xl p-3.5 text-white font-medium max-w-[85%] text-xs leading-relaxed shadow-sm">${msg.content}</div>
                         </div>`;
                 } else if (msg.role === 'assistant') {
+                    const escapedContent = (msg.content || '').replace(/["'`]/g, '&quot;');
                     chatStream.innerHTML += `
                         <div class="flex items-start gap-3 w-full">
                             <div class="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-sm">B</div>
                             <div class="bg-white/90 dark:bg-slate-950/90 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 text-slate-800 dark:text-slate-200 max-w-[85%] text-xs leading-relaxed flex flex-col gap-2 shadow-sm">
                                 <div class="ai-markdown-body">${marked.parse(msg.content)}</div>
+                                <div class="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
+                                    <button onclick="copyMessageText(this)" data-text="${escapedContent}" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition flex items-center gap-1">📋 Copy</button>
+                                    <button onclick="speakMessageText(this)" data-text="${escapedContent}" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition flex items-center gap-1">🔊 Speak</button>
+                                </div>
                             </div>
                         </div>`;
                 }
@@ -1100,16 +1105,62 @@ UNIFIED_HTML_TEMPLATE = r"""
 
             if (window.activeStreams[activeChatId]) {
                 const streamData = window.activeStreams[activeChatId];
+                const escapedBuffer = (streamData.buffer || '').replace(/["'`]/g, '&quot;');
                 chatStream.innerHTML += `
                     <div class="flex items-start gap-3 w-full">
                         <div class="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-sm">B</div>
                         <div class="bg-white/90 dark:bg-slate-950/90 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 text-slate-800 dark:text-slate-200 max-w-[85%] text-xs leading-relaxed flex flex-col gap-2 shadow-sm">
                             <div id="${streamData.msgId}" class="ai-markdown-body">${streamData.isDone ? marked.parse(streamData.buffer) : streamData.buffer}</div>
+                            ${streamData.isDone ? `
+                            <div class="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
+                                <button onclick="copyMessageText(this)" data-text="${escapedBuffer}" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition flex items-center gap-1">📋 Copy</button>
+                                <button onclick="speakMessageText(this)" data-text="${escapedBuffer}" class="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition flex items-center gap-1">🔊 Speak</button>
+                            </div>` : ''}
                         </div>
                     </div>`;
             }
 
             chatStream.scrollTop = chatStream.scrollHeight;
+        }
+
+        function copyMessageText(btn) {
+            const text = btn.getAttribute('data-text');
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = btn.innerText;
+                btn.innerText = '✓ Copied!';
+                setTimeout(() => { btn.innerText = orig; }, 1500);
+            });
+        }
+
+        function speakMessageText(btn) {
+            let text = btn.getAttribute('data-text');
+            if (!('speechSynthesis' in window)) {
+                return alert("Text-to-speech is not supported in this browser.");
+            }
+            
+            // Clean markdown and special symbols to prevent unnatural pauses
+            text = text
+                .replace(/###|\*\*|\*|__|_|`|#|>|\[.*?\]\(.*?\)/g, '')
+                .replace(/[-•]\s+/g, '. ')
+                .replace(/\n+/g, '. ');
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            const voices = window.speechSynthesis.getVoices();
+            const targetLang = currentLang === 'zh-tw' || currentLang === 'zh-cn' ? 'zh' : 'en';
+            
+            // Filter specifically for neural/enhanced local engines
+            const preferredVoice = voices.find(v => v.lang.toLowerCase().startsWith(targetLang) && (v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Enhanced'))) || voices.find(v => v.lang.toLowerCase().startsWith(targetLang));
+            
+            if (preferredVoice) {
+                utterance.voice = preferredVoice;
+            }
+            
+            utterance.rate = 1.0; 
+            utterance.pitch = 1.0; 
+            
+            window.speechSynthesis.speak(utterance);
         }
 
         function switchView(mode) {
@@ -1673,7 +1724,6 @@ UNIFIED_HTML_TEMPLATE = r"""
                     const escapedTitle = (resItem.title || 'Role').replace(/'/g, "\\'");
                     const accId = `acc-${runId}-${idx}`;
 
-                    // Dynamic badge color mapping: >=70 (green), <=30 (red), others (yellow)
                     const score = resItem.score || 0;
                     let badgeColorClass = 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300';
                     if (score >= 70) {
