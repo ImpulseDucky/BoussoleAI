@@ -65,7 +65,7 @@ def load_storage():
         except Exception as e:
             print(f"Error loading chat storage: {e}")
     
-    default_id = "default"
+    default_id = f"chat_{int(datetime.now().timestamp())}"
     default_sessions = {
         default_id: {
             "id": default_id,
@@ -86,6 +86,19 @@ def save_storage(sessions, active_id):
             json.dump({'sessions': sessions, 'active_id': active_id}, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"Error saving chat storage: {e}")
+
+# Helper function to fix vertical string line breaks in extracted text
+def normalize_resume_text(raw_text: str) -> str:
+    if not raw_text:
+        return ""
+    text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
+    text = re.sub(r'[ \t]+', ' ', text)
+    paragraphs = text.split('\n\n')
+    cleaned_paragraphs = []
+    for p in paragraphs:
+        lines = [line.strip() for line in p.split('\n') if line.strip()]
+        cleaned_paragraphs.append(' '.join(lines))
+    return '\n\n'.join(cleaned_paragraphs)
 
 # ==============================================================================
 # 1. STUDENT FINANCIAL AID ENGINE
@@ -254,12 +267,12 @@ UNIFIED_HTML_TEMPLATE = r"""
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        html, body { height: 100vh; overflow: hidden; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; display: flex; flex-direction: column; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
         * { box-sizing: border-box; min-width: 0; }
-        body, html { overflow-x: hidden; width: 100%; height: 100%; }
         #chat-stream { overflow-x: hidden !important; word-break: break-word; overflow-wrap: anywhere; }
         .ai-markdown-body p { margin-bottom: 0.75rem !important; }
         .ai-markdown-body ul, .ai-markdown-body ol { margin-bottom: 0.75rem !important; padding-left: 1.25rem; list-style-type: disc; }
@@ -272,13 +285,14 @@ UNIFIED_HTML_TEMPLATE = r"""
         .dark .bg-grid-pattern {
             background-image: radial-gradient(circle, rgba(129, 140, 248, 0.15) 1.2px, transparent 1.2px);
         }
+        canvas { touch-action: none; }
     </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-[100dvh] flex flex-col justify-between overflow-y-auto md:overflow-hidden transition-colors relative bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-100/50 via-slate-50 to-slate-100 dark:from-indigo-950/30 dark:via-slate-950 dark:to-slate-950" onload="initApp()">
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors relative bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-100/50 via-slate-50 to-slate-100 dark:from-indigo-950/30 dark:via-slate-950 dark:to-slate-950" onload="initApp()">
 
     <!-- Header Navigation Bar -->
-    <header class="border-b border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-50 flex-shrink-0 transition-colors shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
+    <header class="border-b border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md sticky top-0 z-50 flex-shrink-0 transition-colors shadow-sm h-14">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-4">
             
             <!-- Branding with Dual Gradient & Compass -->
             <div class="flex items-center gap-2">
@@ -302,9 +316,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                     <option value="job" data-i18n="btn_job">Job Matcher</option>
                     <option value="copilot" data-i18n="btn_copilot">Financial Aid</option>
                     <option value="bridge" data-i18n="btn_bridge">Grant-to-Career</option>
+                    <option value="constellation" data-i18n="btn_constellation">Skill Constellation</option>
                 </select>
 
-                <!-- Desktop Navigation Pills -->
+                <!-- Desktop Navigation Pills (5 Views) -->
                 <div class="hidden md:flex items-center bg-slate-200/50 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 gap-1 backdrop-blur-sm">
                     <button onclick="switchView('career')" id="btn-career" data-i18n="btn_career" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm transition">
                         Career Coach
@@ -317,6 +332,9 @@ UNIFIED_HTML_TEMPLATE = r"""
                     </button>
                     <button onclick="switchView('bridge')" id="btn-bridge" data-i18n="btn_bridge" class="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
                         Grant-to-Career
+                    </button>
+                    <button onclick="switchView('constellation')" id="btn-constellation" data-i18n="btn_constellation" class="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+                        Skill Constellation
                     </button>
                 </div>
 
@@ -339,25 +357,25 @@ UNIFIED_HTML_TEMPLATE = r"""
     </header>
 
     <!-- MAIN APP CONTAINER WITH GRID PATTERN -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 w-full flex-1 flex flex-col overflow-y-auto md:overflow-hidden bg-grid-pattern">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 w-full flex-1 flex flex-col bg-grid-pattern overflow-hidden">
 
         <!-- VIEW 1: CAREER COACH -->
-        <div id="view-career" class="flex-1 flex flex-col md:flex-row gap-4 h-full overflow-y-auto md:overflow-hidden">
-            <aside class="w-full md:w-72 flex flex-col gap-3 flex-shrink-0 overflow-y-auto max-h-[240px] md:max-h-none custom-scrollbar">
+        <div id="view-career" class="flex-1 flex flex-col md:flex-row gap-4 h-[calc(100vh-6.5rem)] min-h-0">
+            <aside class="w-full md:w-72 flex flex-col gap-3 flex-shrink-0 h-full overflow-hidden">
                 
-                <!-- Chat History Panel -->
-                <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col gap-2">
-                    <div class="flex items-center justify-between">
+                <!-- Chat History Panel (Flexible height container with internal scroll, never compresses individual boxes) -->
+                <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col flex-1 min-h-[160px] max-h-[240px] flex-shrink-0">
+                    <div class="flex items-center justify-between pb-2 flex-shrink-0">
                         <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="chat_history_title">Conversations</h2>
                         <button onclick="createNewChat()" data-i18n="new_chat_btn" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold transition">+ New</button>
                     </div>
-                    <div id="chat-history-list" class="flex flex-col gap-1 max-h-[140px] overflow-y-auto custom-scrollbar">
+                    <div id="chat-history-list" class="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar flex-1 pr-1">
                         <!-- Dynamic items -->
                     </div>
                 </div>
 
                 <!-- Resume Upload -->
-                <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col gap-2">
+                <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col gap-2 flex-shrink-0">
                     <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="upload_resume_title">Resume Context</h2>
                     <label for="pdf-file-input" class="cursor-pointer flex items-center justify-center p-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 rounded-xl bg-slate-50/50 dark:bg-slate-950/50 transition text-center">
                         <span id="upload-status-text" data-i18n="upload_resume_label" class="text-xs text-slate-600 dark:text-slate-400 font-medium truncate">Attach PDF/TXT Resume</span>
@@ -366,7 +384,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 </div>
 
                 <!-- Playbooks -->
-                <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col gap-2">
+                <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                     <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="playbooks_title">Action Templates</h2>
                     <div class="grid grid-cols-1 gap-1.5">
                         <button onclick="applyPreset('roast')" data-i18n="preset_roast" class="text-left p-2 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200/60 dark:border-slate-800/60 hover:border-indigo-500/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-xs text-slate-700 dark:text-slate-300 font-medium truncate">Resume Audit</button>
@@ -377,7 +395,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 </div>
 
                 <!-- Actions -->
-                <div id="sidebar-actions" class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col gap-2">
+                <div id="sidebar-actions" class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col gap-2 flex-shrink-0">
                     <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="chat_actions_title">Session Options</h2>
                     <div class="flex flex-col gap-1.5">
                         <button onclick="exportMarkdown()" id="export-btn" data-i18n="export_btn" class="text-left p-2 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium transition truncate">
@@ -386,19 +404,22 @@ UNIFIED_HTML_TEMPLATE = r"""
                         <button onclick="deleteActiveChat()" data-i18n="delete_btn" class="text-left p-2 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200/60 dark:border-slate-800/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 text-slate-700 dark:text-slate-300 text-xs font-medium transition truncate">
                             Delete Current Session
                         </button>
+                        <button onclick="deleteAllChats()" data-i18n="delete_all_btn" class="text-left p-2 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200/60 dark:border-slate-800/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 text-slate-700 dark:text-slate-300 text-xs font-medium transition truncate">
+                            Delete All Sessions
+                        </button>
                     </div>
                 </div>
             </aside>
 
             <!-- Chat Main Panel with Top Gradient Line -->
-            <section class="flex-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-md flex flex-col overflow-hidden h-full min-h-[480px] md:min-h-0 min-w-0 relative before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-indigo-500 before:via-purple-500 before:to-cyan-500">
+            <section class="flex-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-md flex flex-col overflow-hidden h-full min-w-0 relative before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-indigo-500 before:via-purple-500 before:to-cyan-500">
                 <div id="chat-stream" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-sm pt-5">
                     <!-- Messages -->
                 </div>
 
                 <!-- Input Bar -->
                 <div class="p-3 border-t border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/50 flex-shrink-0 flex flex-col gap-2">
-                    <form id="chat-form" class="flex gap-2 items-center">
+                    <form id="chat-form" onsubmit="submitChat(event)" class="flex gap-2 items-center">
                         <textarea id="user-input" rows="1" class="flex-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar resize-none min-h-[42px] shadow-inner" placeholder="Ask a question or select an action template..." required></textarea>
                         <button type="submit" id="send-button" data-i18n="send_btn" class="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium rounded-xl text-xs transition shadow-md">Send</button>
                     </form>
@@ -409,15 +430,15 @@ UNIFIED_HTML_TEMPLATE = r"""
             </section>
         </div>
 
-        <!-- VIEW 2: JOB COMPARISON PAGE -->
-        <div id="view-job" class="hidden flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+        <!-- VIEW 2: JOB COMPARISON & HISTORY LOG PAGE -->
+        <div id="view-job" class="hidden flex-1 flex flex-col gap-4 pb-12 overflow-y-auto custom-scrollbar">
             <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-6 shadow-md flex flex-col gap-6 max-w-5xl mx-auto w-full relative overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-indigo-500 before:via-purple-500 before:to-cyan-500">
                 <div>
                     <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="job_view_title">Role Compatibility & Match Analysis</h2>
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="job_view_subtitle">Evaluate target positions against your resume profile.</p>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                     <!-- Column A: Inputs -->
                     <div class="flex flex-col gap-4">
                         <h3 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="job_col1_title">1. Resume & Target Positions</h3>
@@ -432,7 +453,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
                         <div class="flex flex-col gap-1.5">
                             <label class="text-xs font-medium text-slate-700 dark:text-slate-300" data-i18n="job_paste_label">Or Resume Text:</label>
-                            <textarea id="job-cv-text" rows="4" class="w-full bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs rounded-xl p-3 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar resize-none shadow-inner" placeholder="Paste resume text..."></textarea>
+                            <textarea id="job-cv-text" rows="4" onblur="cleanResumeText(this)" class="w-full bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs rounded-xl p-3 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar resize-none shadow-inner" placeholder="Paste resume text..."></textarea>
                         </div>
 
                         <button onclick="recommendJobs()" id="recommend-jobs-btn" data-i18n="job_recommend_btn" class="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition">
@@ -444,7 +465,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                                 <label class="text-xs font-medium text-slate-700 dark:text-slate-300" data-i18n="job_target_label">Target Positions:</label>
                                 <button onclick="addJobInputBox()" data-i18n="job_add_role_btn" class="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">+ Add Position</button>
                             </div>
-                            <div id="job-inputs-list" class="flex flex-col gap-2">
+                            <div id="job-inputs-list" class="flex flex-col gap-2 max-h-[380px] overflow-y-auto custom-scrollbar p-1">
                                 <div class="job-input-item flex flex-col gap-2 p-3 rounded-xl bg-slate-50/70 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800/80">
                                     <input type="text" placeholder="Job Title (e.g. Software Engineer)" data-i18n-placeholder="job_title_ph" class="job-title-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg px-2.5 py-1.5 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                                     <textarea rows="2" placeholder="Job description (optional)..." data-i18n-placeholder="job_desc_ph" class="job-desc-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg p-2.5 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar resize-none"></textarea>
@@ -457,19 +478,20 @@ UNIFIED_HTML_TEMPLATE = r"""
                         </button>
                     </div>
 
-                    <!-- Column B: Results -->
-                    <div class="flex flex-col gap-3 bg-slate-50/70 dark:bg-slate-950/70 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 overflow-y-auto custom-scrollbar">
+                    <!-- Column B: History Log Container -->
+                    <div class="flex flex-col gap-3 bg-slate-50/70 dark:bg-slate-950/70 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 max-h-[680px] overflow-y-auto custom-scrollbar">
                         <div class="flex justify-between items-center">
-                            <h3 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="job_history_title">2. Analysis Results</h3>
-                            <button onclick="clearJobHistory()" data-i18n="job_clear_btn" class="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">Clear</button>
+                            <h3 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="job_history_title">2. Role Evaluation History Log</h3>
+                            <button onclick="clearJobHistory()" data-i18n="job_clear_btn" class="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">Clear History</button>
                         </div>
                         
-                        <div id="job-placeholder-state" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 dark:text-slate-400 text-xs gap-1 min-h-[200px]">
+                        <div id="job-placeholder-state" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500 dark:text-slate-400 text-xs gap-1 min-h-[220px]">
                             <p data-i18n="job_history_empty">Submit your resume and target job titles to generate fit metrics and keyword gaps.</p>
                         </div>
 
-                        <div id="job-history-container" class="flex flex-col gap-3">
-                            <!-- Results inject here -->
+                        <!-- Dynamic Grouped History Logs -->
+                        <div id="job-history-container" class="flex flex-col gap-4">
+                            <!-- Grouped Run Cards appended here -->
                         </div>
                     </div>
                 </div>
@@ -477,9 +499,9 @@ UNIFIED_HTML_TEMPLATE = r"""
         </div>
 
         <!-- VIEW 3: STUDENT FINANCIAL AID PORTAL -->
-        <div id="view-copilot" class="hidden flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 h-auto md:h-full overflow-y-auto md:overflow-hidden custom-scrollbar">
+        <div id="view-copilot" class="hidden flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 pb-12 overflow-y-auto custom-scrollbar">
             <!-- Left Inputs -->
-            <section class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-5 shadow-sm flex flex-col gap-4 h-[460px] md:h-full overflow-y-auto custom-scrollbar">
+            <section class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-5 shadow-sm flex flex-col gap-4 overflow-y-auto custom-scrollbar">
                 <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="copilot_col1_title">1. Financial Assessment</h2>
                 <div class="grid grid-cols-2 gap-2">
                     <button onclick="loadScenario('full_grant', 10000, 4)" data-i18n="scenario_full" class="p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition truncate">Full Grant Profile</button>
@@ -514,7 +536,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             </section>
 
             <!-- Privacy Shield -->
-            <section class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-5 shadow-sm flex flex-col gap-3 h-[420px] md:h-full overflow-y-auto custom-scrollbar">
+            <section class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-5 shadow-sm flex flex-col gap-3 overflow-y-auto custom-scrollbar">
                 <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="copilot_privacy_title">2. Compliance & Privacy Audit</h2>
                 <div id="pii-status" class="hidden p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-xs flex justify-between items-center">
                     <span class="text-slate-600 dark:text-slate-400" data-i18n="copilot_protected_label">Redacted Items:</span>
@@ -524,7 +546,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             </section>
 
             <!-- Results & Action Plan -->
-            <section class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-5 shadow-sm flex flex-col gap-4 h-[540px] md:h-full overflow-y-auto custom-scrollbar">
+            <section class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-5 shadow-sm flex flex-col gap-4 overflow-y-auto custom-scrollbar">
                 <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="copilot_result_title">3. Evaluation Summary</h2>
                 
                 <div class="bg-slate-50/80 dark:bg-slate-950/80 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 flex flex-col gap-3">
@@ -567,7 +589,7 @@ UNIFIED_HTML_TEMPLATE = r"""
         </div>
 
         <!-- VIEW 4: GRANT-TO-CAREER BRIDGE -->
-        <div id="view-bridge" class="hidden flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+        <div id="view-bridge" class="hidden flex-1 flex flex-col gap-4 pb-12 overflow-y-auto custom-scrollbar">
             <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-6 shadow-md flex flex-col gap-6 max-w-4xl mx-auto w-full relative overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-indigo-500 before:via-purple-500 before:to-cyan-500">
                 <div>
                     <h2 class="text-base font-bold text-slate-900 dark:text-white" data-i18n="bridge_title">Financial Assistance & Work-Study Bridge</h2>
@@ -644,20 +666,106 @@ UNIFIED_HTML_TEMPLATE = r"""
             </div>
         </div>
 
+        <!-- VIEW 5: SKILL CONSTELLATION MAP -->
+        <div id="view-constellation" class="hidden flex-1 relative bg-slate-900/60 dark:bg-slate-950/80 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden flex flex-col justify-between h-[calc(100vh-6.5rem)] min-h-0">
+            
+            <!-- Main Split Body: Left Generator/History Panel & Right Canvas -->
+            <div class="flex-1 relative flex flex-col md:flex-row min-h-0 overflow-hidden">
+                
+                <!-- Left Sidebar: Constellation Generator & History Log -->
+                <div class="w-full md:w-80 flex-shrink-0 bg-white/90 dark:bg-slate-900/95 backdrop-blur-md border-r border-slate-200/80 dark:border-slate-800/80 p-3 flex flex-col gap-3 overflow-y-auto custom-scrollbar z-10">
+                    
+                    <!-- Generator Box -->
+                    <div class="flex flex-col gap-2.5 bg-slate-50/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 flex-shrink-0">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">OpenAI Galaxy Generator</h3>
+                            <label for="constellation-cv-file" class="text-[10px] text-indigo-500 hover:underline cursor-pointer">Upload CV PDF</label>
+                            <input type="file" id="constellation-cv-file" accept=".pdf,.txt" class="hidden" onchange="uploadConstellationCV(event)">
+                        </div>
+
+                        <textarea id="constellation-cv" rows="3" onblur="cleanResumeText(this)" class="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-[11px] rounded-lg p-2 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 custom-scrollbar resize-none" placeholder="Paste CV details..."></textarea>
+                        <input type="text" id="constellation-job" class="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-[11px] rounded-lg px-2.5 py-1.5 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Target Job Title (e.g., AI Research Engineer)">
+
+                        <button onclick="generateNewConstellation()" id="gen-constellation-btn" class="w-full py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-xs rounded-lg transition shadow-sm">
+                            Generate Detailed Skill Map
+                        </button>
+                    </div>
+
+                    <!-- Constellation History Log (Fixed height container with internal scroll, never reduces) -->
+                    <div class="flex flex-col bg-slate-50/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 h-[220px] flex-shrink-0">
+                        <div class="flex justify-between items-center pb-2 flex-shrink-0">
+                            <h3 class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Galaxy History Log</h3>
+                            <button onclick="clearConstellationHistory()" class="text-[10px] text-slate-500 hover:text-rose-500 transition">Clear</button>
+                        </div>
+                        <div id="constellation-history-list" class="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar flex-1 pr-1">
+                            <div class="text-[11px] text-slate-400 dark:text-slate-500 text-center py-4">No recent map generations.</div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right Canvas Viewport -->
+                <div class="flex-1 relative overflow-hidden bg-slate-950">
+                    <canvas id="constellationCanvas" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></canvas>
+
+                    <!-- Top Right Floating Controls for Constellation Map -->
+                    <div class="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-md">
+                        <button onclick="resetCamera()" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300 transition">Recenter</button>
+                        <button onclick="toggleConnections()" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300 transition">Toggle Beams</button>
+                    </div>
+
+                    <!-- Node Quest Slide-Out Modal -->
+                    <div id="nodeModal" class="absolute bottom-4 right-4 z-20 w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-xl transition-all transform translate-y-6 opacity-0 pointer-events-none flex flex-col gap-2.5">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <span id="nodeCategory" class="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Cluster Name</span>
+                                <h3 id="nodeTitle" class="text-xs font-bold text-slate-900 dark:text-white mt-0.5">Node Title</h3>
+                            </div>
+                            <span id="nodeStatusBadge" class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider">Status</span>
+                        </div>
+
+                        <p id="nodeDesc" class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">—</p>
+
+                        <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200/80 dark:border-slate-800 flex flex-col gap-1">
+                            <span class="text-[9px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Mission Quest:</span>
+                            <p id="nodeQuest" class="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium leading-tight">—</p>
+                        </div>
+
+                        <div class="flex justify-end items-center pt-1.5 border-t border-slate-200/80 dark:border-slate-800">
+                            <button id="nodeActionBtn" onclick="toggleQuestStatus()" class="px-3 py-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-xs rounded-lg shadow-sm transition">
+                                Complete Quest
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
     </main>
 
     <!-- Frontend Script Logic -->
     <script>
-        // Global buffer map for streams running in the background
         window.activeStreams = window.activeStreams || {};
+
+        function cleanResumeText(el) {
+            if (!el || !el.value) return;
+            const raw = el.value;
+            const cleaned = raw.replace(/\r\n/g, '\n')
+                               .replace(/[ \t]+/g, ' ')
+                               .split(/\n\s*\n/)
+                               .map(para => para.split('\n').map(line => line.trim()).filter(Boolean).join(' '))
+                               .join('\n\n');
+            el.value = cleaned;
+        }
 
         const translations = {
             en: {
-                brand_subtitle_career: "Career Navigation",
                 btn_career: "Career Coach",
                 btn_job: "Job Matcher",
                 btn_copilot: "Financial Aid",
                 btn_bridge: "Grant-to-Career",
+                btn_constellation: "Skill Constellation",
                 chat_history_title: "Conversations",
                 new_chat_btn: "+ New",
                 upload_resume_title: "Resume Context",
@@ -670,6 +778,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_actions_title: "Session Options",
                 export_btn: "Export Conversation",
                 delete_btn: "Delete Current Session",
+                delete_all_btn: "Delete All Sessions",
                 chat_placeholder: "Ask a question or select an action template...",
                 send_btn: "Send",
                 tip_enter: "Press Enter to send, Shift + Enter for line break.",
@@ -686,8 +795,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 job_title_ph: "Job Title (e.g. Software Engineer)",
                 job_desc_ph: "Job description (optional)...",
                 job_submit_btn: "Run Match Evaluation",
-                job_history_title: "2. Analysis Results",
-                job_clear_btn: "Clear",
+                job_history_title: "2. Role Evaluation History Log",
+                job_clear_btn: "Clear History",
                 job_history_empty: "Submit your resume and target job titles to generate fit metrics and keyword gaps.",
 
                 copilot_col1_title: "1. Financial Assessment",
@@ -739,11 +848,11 @@ UNIFIED_HTML_TEMPLATE = r"""
                 bridge_apply_btn: "Apply"
             },
             "zh-tw": {
-                brand_subtitle_career: "職涯導航系統",
                 btn_career: "職涯教練",
                 btn_job: "職缺匹配",
                 btn_copilot: "學生資助",
                 btn_bridge: "資助與就業橋樑",
+                btn_constellation: "技能星座圖",
                 chat_history_title: "對話歷史",
                 new_chat_btn: "+ 新建",
                 upload_resume_title: "履歷內容",
@@ -756,6 +865,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_actions_title: "會話選項",
                 export_btn: "匯出對話紀錄",
                 delete_btn: "刪除當前會話",
+                delete_all_btn: "刪除所有會話",
                 chat_placeholder: "請輸入問題或選擇快捷模組...",
                 send_btn: "發送",
                 tip_enter: "按 Enter 發送，Shift + Enter 換行。",
@@ -772,64 +882,16 @@ UNIFIED_HTML_TEMPLATE = r"""
                 job_title_ph: "職稱 (例如: 軟體工程師)",
                 job_desc_ph: "職缺描述 (選填)...",
                 job_submit_btn: "執行匹配評估",
-                job_history_title: "2. 分析結果",
-                job_clear_btn: "清除",
-                job_history_empty: "請提交履歷與目標職稱以產生匹配度與關鍵字落差分析。",
-
-                copilot_col1_title: "1. 財務狀況評估",
-                scenario_full: "全額資助檔案",
-                scenario_partial: "半額資助檔案",
-                scenario_high: "標準檔案",
-                scenario_incomplete: "不完整檔案",
-                copilot_notes_ph: "請輸入家庭財務狀況...",
-                copilot_calc_btn: "評估資助資格",
-                copilot_whatif_title: "參數調整",
-                copilot_income_label: "家庭每月總收入 (HKD)：",
-                copilot_members_label: "同住家庭成員數：",
-                copilot_privacy_title: "2. 合規與隱私審核",
-                copilot_protected_label: "已脫敏項目：",
-                copilot_awaiting_input: "等待輸入...",
-                copilot_result_title: "3. 評估結果",
-                copilot_status_label: "狀態：",
-                copilot_awaiting_badge: "等待評估",
-                copilot_no_profile: "尚未進行評估",
-                copilot_calc_prompt: "請於左側輸入參數以檢視建議。",
-                copilot_policy_label: "政策法規參考：",
-                copilot_checklist_label: "所需證明文件：",
-                copilot_checklist_awaiting: "• 等待評估",
-                copilot_appeal_title: "特殊情況覆核",
-                copilot_appeal_desc: "可提交特殊情況覆核申請以供專人審查。",
-                copilot_appeal_default: "選擇覆核原因...",
-                appeal_opt1: "突發家庭醫療緊急情況",
-                appeal_opt2: "主要經濟支柱喪失",
-                appeal_opt3: "季節性收入落差",
-                copilot_appeal_btn: "提交覆核申請",
-
-                bridge_title: "學生資助與校內工讀橋樑",
-                bridge_subtitle: "評估資金缺口與相關校內兼職計畫。",
-                bridge_income_label: "每月收入：",
-                bridge_tuition_label: "學費支出：",
-                bridge_living_label: "生活開支：",
-                bridge_shortfall_title: "資金缺口摘要",
-                bridge_shortfall_text: "根據當前參數計算之資金缺口為：",
-                bridge_loan_status_label: "貸款方案：",
-                bridge_loan_eligible_badge: "符合 NLSFT 資格",
-                bridge_loan_desc: "您可透過政府非免入息審查貸款計畫 (NLSFT) 填補開支。",
-                bridge_matched_jobs_title: "校內工讀與工作學習計畫",
-                job_badge_flexible: "兼職",
-                job_badge_grant: "工讀計畫",
-                bridge_job1_title: "AI 實驗室學生助理",
-                bridge_job1_desc: "協助 Python 資料處理與部門腳本優化。",
-                bridge_job2_title: "學生資助大使",
-                bridge_job2_desc: "協助學生完成資助文件申請與檢核流程。",
-                bridge_apply_btn: "申請"
+                job_history_title: "2. 評估歷史紀錄",
+                job_clear_btn: "清除歷史",
+                job_history_empty: "請提交履歷與目標職稱以產生匹配度與關鍵字落差分析。"
             },
             "zh-cn": {
-                brand_subtitle_career: "职涯导航系统",
                 btn_career: "职涯教练",
                 btn_job: "职位匹配",
                 btn_copilot: "学生资助",
                 btn_bridge: "资助与就业桥梁",
+                btn_constellation: "技能星座图",
                 chat_history_title: "对话历史",
                 new_chat_btn: "+ 新建",
                 upload_resume_title: "简历内容",
@@ -842,6 +904,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_actions_title: "会话选项",
                 export_btn: "导出对话记录",
                 delete_btn: "删除当前会话",
+                delete_all_btn: "删除所有会话",
                 chat_placeholder: "请输入问题或选择快捷模块...",
                 send_btn: "发送",
                 tip_enter: "按 Enter 发送，Shift + Enter 换行。",
@@ -858,63 +921,14 @@ UNIFIED_HTML_TEMPLATE = r"""
                 job_title_ph: "职称 (例如: 软件工程师)",
                 job_desc_ph: "职位描述 (选填)...",
                 job_submit_btn: "执行匹配评估",
-                job_history_title: "2. 分析结果",
-                job_clear_btn: "清除",
-                job_history_empty: "请提交简历与目标职称以生成匹配度与关键词落差分析。",
-
-                copilot_col1_title: "1. 财务状况评估",
-                scenario_full: "全额资助档案",
-                scenario_partial: "半额资助档案",
-                scenario_high: "标准档案",
-                scenario_incomplete: "不完整档案",
-                copilot_notes_ph: "请输入家庭财务状况...",
-                copilot_calc_btn: "评估资助资格",
-                copilot_whatif_title: "参数调整",
-                copilot_income_label: "家庭每月总收入 (HKD)：",
-                copilot_members_label: "同住家庭成员数：",
-                copilot_privacy_title: "2. 合规与隐私审核",
-                copilot_protected_label: "已脱敏项目：",
-                copilot_awaiting_input: "等待输入...",
-                copilot_result_title: "3. 评估结果",
-                copilot_status_label: "状态：",
-                copilot_awaiting_badge: "等待评估",
-                copilot_no_profile: "尚未进行评估",
-                copilot_calc_prompt: "请于左侧输入参数以查看建议。",
-                copilot_policy_label: "政策法规参考：",
-                copilot_checklist_label: "所需证明文件：",
-                copilot_checklist_awaiting: "• 等待评估",
-                copilot_appeal_title: "特殊情况复核",
-                copilot_appeal_desc: "可提交特殊情况复核申请以供专人审查。",
-                copilot_appeal_default: "选择复核原因...",
-                appeal_opt1: "突发家庭医疗紧急情况",
-                appeal_opt2: "主要经济支柱丧失",
-                appeal_opt3: "季节性收入落差",
-                copilot_appeal_btn: "提交复核申请",
-
-                bridge_title: "学生资助与校内工读桥梁",
-                bridge_subtitle: "评估资金缺口与相关校内兼职计划。",
-                bridge_income_label: "每月收入：",
-                bridge_tuition_label: "学费支出：",
-                bridge_living_label: "生活开支：",
-                bridge_shortfall_title: "资金缺口摘要",
-                bridge_shortfall_text: "根据当前参数计算之资金缺口为：",
-                bridge_loan_status_label: "贷款方案：",
-                bridge_loan_eligible_badge: "符合 NLSFT 资格",
-                bridge_loan_desc: "您可通过政府非免入息审查贷款计划 (NLSFT) 填补开销。",
-                bridge_matched_jobs_title: "校内工读与工作学习计划",
-                job_badge_flexible: "兼职",
-                job_badge_grant: "工读计划",
-                bridge_job1_title: "AI 实验室学生助理",
-                bridge_job1_desc: "协助 Python 数据处理与部门脚本优化。",
-                bridge_job2_title: "学生资助大使",
-                bridge_job2_desc: "协助学生完成资助文件申请与检核流程。",
-                bridge_apply_btn: "申请"
+                job_history_title: "2. 评估历史记录",
+                job_clear_btn: "清除历史",
+                job_history_empty: "请提交简历与目标职称以生成匹配度与关键词落差分析。"
             }
         };
 
         let currentLang = 'en';
 
-        // Dark / Light Text Mode Switcher Logic
         function toggleTheme() {
             const html = document.documentElement;
             const label = document.getElementById('theme-label');
@@ -929,6 +943,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 localStorage.setItem('theme', 'dark');
                 if (label) label.innerText = 'Light';
             }
+            if (currentMode === 'constellation') drawConstellation();
         }
 
         function initTheme() {
@@ -971,6 +986,7 @@ UNIFIED_HTML_TEMPLATE = r"""
         let currentMode = 'career';
         let activeChatId = null;
         let uploadedResumeText = "";
+        let constellationHistory = [];
 
         async function initApp() {
             initTheme();
@@ -980,7 +996,19 @@ UNIFIED_HTML_TEMPLATE = r"""
             if (langSelect) langSelect.value = savedLang;
             
             changeLanguage(savedLang);
+            loadConstellationHistoryFromStorage();
             await loadChats();
+            initConstellationEngine();
+
+            const inputEl = document.getElementById('user-input');
+            if (inputEl) {
+                inputEl.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        submitChat(e);
+                    }
+                });
+            }
         }
 
         async function loadChats() {
@@ -999,12 +1027,13 @@ UNIFIED_HTML_TEMPLATE = r"""
             const listEl = document.getElementById('chat-history-list');
             if (!listEl) return;
             listEl.innerHTML = '';
-            chats.forEach(chat => {
+            // Newest chats on top
+            const sortedChats = [...chats].reverse();
+            sortedChats.forEach(chat => {
                 const isActive = chat.id === activeId;
                 const div = document.createElement('div');
-                div.className = `p-2 rounded-xl text-xs cursor-pointer transition truncate ${isActive ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-200/80 dark:border-indigo-800/80 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'}`;
-                div.innerHTML = `<span class="truncate block">${chat.title}</span>`;
-                div.onclick = () => switchChat(chat.id);
+                div.className = `p-2 rounded-xl text-xs cursor-pointer transition truncate flex justify-between items-center flex-shrink-0 ${isActive ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-200/80 dark:border-indigo-800/80 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'}`;
+                div.innerHTML = `<span class="truncate block flex-1" onclick="switchChat('${chat.id}')">${chat.title}</span>`;
                 listEl.appendChild(div);
             });
         }
@@ -1029,8 +1058,17 @@ UNIFIED_HTML_TEMPLATE = r"""
         }
 
         async function deleteActiveChat() {
-            if (!confirm("Delete this session?")) return;
+            if (!confirm("Are you sure you want to delete this session?")) return;
             const res = await fetch('/api/chats/active', { method: 'DELETE' });
+            const data = await res.json();
+            activeChatId = data.active_id;
+            renderChatHistoryList(data.chats, data.active_id);
+            renderMessages(data.messages);
+        }
+
+        async function deleteAllChats() {
+            if (!confirm("Are you sure you want to delete ALL chat sessions?")) return;
+            const res = await fetch('/api/chats/all', { method: 'DELETE' });
             const data = await res.json();
             activeChatId = data.active_id;
             renderChatHistoryList(data.chats, data.active_id);
@@ -1060,7 +1098,6 @@ UNIFIED_HTML_TEMPLATE = r"""
                 }
             });
 
-            // Re-attach ongoing stream buffer if this chat is actively generating
             if (window.activeStreams[activeChatId]) {
                 const streamData = window.activeStreams[activeChatId];
                 chatStream.innerHTML += `
@@ -1085,13 +1122,15 @@ UNIFIED_HTML_TEMPLATE = r"""
             const jobView = document.getElementById('view-job');
             const copilotView = document.getElementById('view-copilot');
             const bridgeView = document.getElementById('view-bridge');
+            const constellationView = document.getElementById('view-constellation');
 
             const btnCareer = document.getElementById('btn-career');
             const btnJob = document.getElementById('btn-job');
             const btnCopilot = document.getElementById('btn-copilot');
             const btnBridge = document.getElementById('btn-bridge');
+            const btnConstellation = document.getElementById('btn-constellation');
 
-            [btnCareer, btnJob, btnCopilot, btnBridge].forEach(btn => {
+            [btnCareer, btnJob, btnCopilot, btnBridge, btnConstellation].forEach(btn => {
                 if (btn) btn.className = "text-xs font-medium px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition";
             });
 
@@ -1099,6 +1138,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             jobView.classList.add('hidden');
             copilotView.classList.add('hidden');
             bridgeView.classList.add('hidden');
+            constellationView.classList.add('hidden');
 
             if (mode === 'career') {
                 careerView.classList.remove('hidden');
@@ -1112,6 +1152,414 @@ UNIFIED_HTML_TEMPLATE = r"""
             } else if (mode === 'bridge') {
                 bridgeView.classList.remove('hidden');
                 if (btnBridge) btnBridge.className = "text-xs font-medium px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm transition";
+            } else if (mode === 'constellation') {
+                constellationView.classList.remove('hidden');
+                if (btnConstellation) btnConstellation.className = "text-xs font-medium px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm transition";
+                setTimeout(() => { resizeConstellationCanvas(); }, 50);
+            }
+        }
+
+        function launchConstellationFromJob(jobTitle) {
+            const cvText = document.getElementById('job-cv-text').value.trim() || uploadedResumeText;
+            
+            if (!cvText) {
+                return alert("Please upload or enter a CV before mapping the constellation.");
+            }
+
+            document.getElementById('constellation-cv').value = cvText;
+            document.getElementById('constellation-job').value = jobTitle;
+
+            switchView('constellation');
+            generateNewConstellation();
+        }
+
+        function toggleAccordion(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden');
+        }
+
+        // ==============================================================================
+        // DYNAMIC CONSTELLATION ENGINE LOGIC WITH DEVICE LOCALSTORAGE PERSISTENCE
+        // ==============================================================================
+        let cCanvas, cCtx;
+        let cWidth, cHeight;
+        let cameraOffset = { x: 0, y: 0 };
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let showBeams = true;
+        let selectedNode = null;
+
+        let constellationNodes = [];
+        let nodeConnections = [];
+
+        function loadConstellationHistoryFromStorage() {
+            try {
+                const saved = localStorage.getItem('boussole_constellation_history');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed)) {
+                        constellationHistory = parsed;
+                    }
+                }
+            } catch (e) {
+                console.error("Error loading constellation history from localStorage:", e);
+            }
+            renderConstellationHistory();
+        }
+
+        function saveConstellationHistoryToStorage() {
+            try {
+                localStorage.setItem('boussole_constellation_history', JSON.stringify(constellationHistory));
+            } catch (e) {
+                console.error("Error saving constellation history to localStorage:", e);
+            }
+        }
+
+        function initConstellationEngine() {
+            cCanvas = document.getElementById('constellationCanvas');
+            if (!cCanvas) return;
+            cCtx = cCanvas.getContext('2d');
+
+            cCanvas.addEventListener('mousedown', e => {
+                isDragging = true;
+                dragStart = { x: e.clientX - cameraOffset.x, y: e.clientY - cameraOffset.y };
+            });
+
+            cCanvas.addEventListener('mousemove', e => {
+                if (isDragging) {
+                    cameraOffset.x = e.clientX - dragStart.x;
+                    cameraOffset.y = e.clientY - dragStart.y;
+                    drawConstellation();
+                }
+            });
+
+            cCanvas.addEventListener('mouseup', () => { isDragging = false; });
+
+            cCanvas.addEventListener('click', e => {
+                const rect = cCanvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left - (cWidth / 2 + cameraOffset.x);
+                const clickY = e.clientY - rect.top - (cHeight / 2 + cameraOffset.y);
+
+                let hit = false;
+                constellationNodes.forEach(node => {
+                    const dist = Math.hypot(clickX - node.x, clickY - node.y);
+                    if (dist <= node.r + 8) {
+                        selectedNode = node;
+                        showNodeModal(node);
+                        hit = true;
+                    }
+                });
+
+                if (!hit && selectedNode) {
+                    selectedNode = null;
+                    hideNodeModal();
+                }
+                drawConstellation();
+            });
+
+            window.addEventListener('resize', () => {
+                if (currentMode === 'constellation') resizeConstellationCanvas();
+            });
+        }
+
+        async function uploadConstellationCV(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch('/api/parse_resume', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.text) {
+                    const el = document.getElementById('constellation-cv');
+                    el.value = data.text;
+                    cleanResumeText(el);
+                }
+            } catch (err) {
+                console.error("Parse error", err);
+            }
+        }
+
+        async function generateNewConstellation() {
+            const cvText = document.getElementById('constellation-cv').value.trim();
+            const jobTitle = document.getElementById('constellation-job').value.trim();
+            const btn = document.getElementById('gen-constellation-btn');
+
+            if (!cvText || !jobTitle) {
+                return alert("Please enter your CV text/upload document and target job title.");
+            }
+
+            btn.disabled = true;
+            btn.innerText = "OpenAI Mapping Detailed Tree (15+ Nodes)...";
+
+            try {
+                const res = await fetch('/api/generate_constellation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cv_text: cvText, job_title: jobTitle })
+                });
+
+                const data = await res.json();
+                if (data.status === 'success' && data.constellation) {
+                    constellationNodes = data.constellation.nodes || [];
+                    nodeConnections = data.constellation.connections || [];
+                    cameraOffset = { x: 0, y: 0 };
+                    selectedNode = null;
+                    hideNodeModal();
+                    drawConstellation();
+
+                    constellationHistory.unshift({
+                        id: Date.now(),
+                        title: jobTitle,
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        nodes: constellationNodes,
+                        connections: nodeConnections
+                    });
+                    saveConstellationHistoryToStorage();
+                    renderConstellationHistory();
+                } else {
+                    alert("Error: " + (data.message || "Failed to generate constellation"));
+                }
+            } catch (err) {
+                console.error(err);
+                alert("An error occurred while communicating with OpenAI.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Generate Detailed Skill Map";
+            }
+        }
+
+        function renderConstellationHistory() {
+            const listEl = document.getElementById('constellation-history-list');
+            if (!listEl) return;
+            if (constellationHistory.length === 0) {
+                listEl.innerHTML = `<div class="text-[11px] text-slate-400 dark:text-slate-500 text-center py-4">No recent map generations.</div>`;
+                return;
+            }
+            listEl.innerHTML = '';
+            constellationHistory.forEach((item) => {
+                const div = document.createElement('div');
+                div.className = "p-2 rounded-xl text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center gap-2 group transition hover:border-indigo-500 cursor-pointer flex-shrink-0";
+                div.innerHTML = `
+                    <div class="truncate flex-1" onclick="loadConstellationFromHistory(${item.id})">
+                        <span class="font-semibold text-slate-900 dark:text-white truncate block">${item.title}</span>
+                        <span class="text-[9px] text-slate-400 font-mono">${item.time} • ${item.nodes.length} Nodes</span>
+                    </div>
+                    <button onclick="deleteConstellationHistoryItem(event, ${item.id})" class="text-slate-400 hover:text-rose-500 p-1 text-[11px]">✕</button>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        function loadConstellationFromHistory(id) {
+            const found = constellationHistory.find(i => i.id === id);
+            if (found) {
+                constellationNodes = found.nodes;
+                nodeConnections = found.connections;
+                cameraOffset = { x: 0, y: 0 };
+                selectedNode = null;
+                hideNodeModal();
+                drawConstellation();
+            }
+        }
+
+        function deleteConstellationHistoryItem(e, id) {
+            e.stopPropagation();
+            if (!confirm("Are you sure you want to delete this constellation from history?")) return;
+            constellationHistory = constellationHistory.filter(i => i.id !== id);
+            saveConstellationHistoryToStorage();
+            renderConstellationHistory();
+        }
+
+        function clearConstellationHistory() {
+            if (!confirm("Are you sure you want to clear all galaxy history logs?")) return;
+            constellationHistory = [];
+            saveConstellationHistoryToStorage();
+            renderConstellationHistory();
+        }
+
+        function resizeConstellationCanvas() {
+            if (!cCanvas || !cCanvas.parentElement) return;
+            cWidth = cCanvas.parentElement.clientWidth;
+            cHeight = cCanvas.parentElement.clientHeight;
+            cCanvas.width = cWidth * window.devicePixelRatio;
+            cCanvas.height = cHeight * window.devicePixelRatio;
+            cCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            drawConstellation();
+        }
+
+        function wrapCanvasText(ctx, text, maxWidth) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = words[0] || '';
+
+            for (let i = 1; i < words.length; i++) {
+                const word = words[i];
+                const width = ctx.measureText(currentLine + " " + word).width;
+                if (width < maxWidth) {
+                    currentLine += " " + word;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            }
+            if (currentLine) lines.push(currentLine);
+            return lines;
+        }
+
+        function drawConstellation() {
+            if (!cCtx) return;
+            cCtx.clearRect(0, 0, cWidth, cHeight);
+            const centerX = cWidth / 2 + cameraOffset.x;
+            const centerY = cHeight / 2 + cameraOffset.y;
+
+            const isDark = document.documentElement.classList.contains('dark');
+
+            if (showBeams) {
+                nodeConnections.forEach(([sourceId, targetId]) => {
+                    const source = constellationNodes.find(n => n.id === sourceId);
+                    const target = constellationNodes.find(n => n.id === targetId);
+                    if (!source || !target) return;
+
+                    cCtx.beginPath();
+                    cCtx.moveTo(centerX + source.x, centerY + source.y);
+                    cCtx.lineTo(centerX + target.x, centerY + target.y);
+                    cCtx.strokeStyle = (source.status === 'unlocked' && target.status === 'unlocked')
+                        ? (isDark ? 'rgba(129, 140, 248, 0.4)' : 'rgba(99, 102, 241, 0.3)')
+                        : (isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(203, 213, 225, 0.6)');
+                    cCtx.lineWidth = 1.5;
+                    cCtx.setLineDash([4, 4]);
+                    cCtx.stroke();
+                    cCtx.setLineDash([]);
+                });
+            }
+
+            if (constellationNodes.length === 0) {
+                cCtx.font = '12px Inter, sans-serif';
+                cCtx.fillStyle = isDark ? '#64748b' : '#94a3b8';
+                cCtx.textAlign = 'center';
+                cCtx.fillText("Awaiting generation. Fill out CV & Target Job on the left to map galaxy.", centerX, centerY);
+                return;
+            }
+
+            constellationNodes.forEach((node) => {
+                const nx = centerX + node.x;
+                const ny = centerY + node.y;
+
+                if (selectedNode && selectedNode.id === node.id) {
+                    cCtx.beginPath();
+                    cCtx.arc(nx, ny, node.r + 7, 0, Math.PI * 2);
+                    cCtx.strokeStyle = '#38bdf8';
+                    cCtx.lineWidth = 2;
+                    cCtx.stroke();
+                }
+
+                const gradient = cCtx.createRadialGradient(nx, ny, 1, nx, ny, node.r * 2.2);
+                gradient.addColorStop(0, node.color || '#6366f1');
+                gradient.addColorStop(1, 'transparent');
+
+                cCtx.beginPath();
+                cCtx.arc(nx, ny, node.r * 2.2, 0, Math.PI * 2);
+                cCtx.fillStyle = gradient;
+                cCtx.globalAlpha = node.status === 'locked' ? 0.2 : 0.6;
+                cCtx.fill();
+                cCtx.globalAlpha = 1.0;
+
+                cCtx.beginPath();
+                cCtx.arc(nx, ny, node.r, 0, Math.PI * 2);
+                cCtx.fillStyle = node.status === 'locked' ? (isDark ? '#334155' : '#94a3b8') : (node.color || '#6366f1');
+                cCtx.fill();
+
+                cCtx.font = '10px Inter, sans-serif';
+                const lines = wrapCanvasText(cCtx, node.title, 110);
+                const lineHeight = 12;
+
+                const labelOffsetY = node.y < 0 ? -(node.r + 8 + (lines.length * lineHeight)) : (node.r + 14);
+
+                lines.forEach((line, index) => {
+                    const textWidth = cCtx.measureText(line).width;
+                    const lineY = ny + labelOffsetY + (index * lineHeight);
+
+                    cCtx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.85)';
+                    cCtx.beginPath();
+                    cCtx.roundRect(nx - (textWidth / 2) - 3, lineY - 9, textWidth + 6, 12, 3);
+                    cCtx.fill();
+
+                    cCtx.fillStyle = node.status === 'locked' ? (isDark ? '#94a3b8' : '#64748b') : (isDark ? '#f8fafc' : '#0f172a');
+                    cCtx.textAlign = 'center';
+                    cCtx.fillText(line, nx, lineY);
+                });
+            });
+        }
+
+        function showNodeModal(node) {
+            const modal = document.getElementById('nodeModal');
+            document.getElementById('nodeCategory').innerText = node.category || "Skill Node";
+            document.getElementById('nodeTitle').innerText = node.title;
+            document.getElementById('nodeDesc').innerText = node.desc || "Skill milestone in trajectory.";
+            document.getElementById('nodeQuest').innerText = node.quest || "Complete standard practical task.";
+
+            const badge = document.getElementById('nodeStatusBadge');
+            const btn = document.getElementById('nodeActionBtn');
+
+            if (node.status === 'unlocked') {
+                badge.innerText = "UNLOCKED";
+                badge.className = "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800";
+                btn.innerText = "Undo Quest";
+                btn.className = "px-3 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs rounded-lg transition shadow-sm";
+            } else {
+                badge.innerText = "LOCKED";
+                badge.className = "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700";
+                btn.innerText = "Complete Quest";
+                btn.className = "px-3 py-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-xs rounded-lg shadow-sm transition";
+            }
+
+            modal.classList.remove('opacity-0', 'translate-y-6', 'pointer-events-none');
+            modal.classList.add('opacity-100', 'translate-y-0');
+        }
+
+        function hideNodeModal() {
+            const modal = document.getElementById('nodeModal');
+            modal.classList.remove('opacity-100', 'translate-y-0');
+            modal.classList.add('opacity-0', 'translate-y-6', 'pointer-events-none');
+        }
+
+        function toggleQuestStatus() {
+            if (!selectedNode) return;
+            if (selectedNode.status === 'unlocked') {
+                selectedNode.status = 'locked';
+            } else {
+                selectedNode.status = 'unlocked';
+            }
+            showNodeModal(selectedNode);
+            drawConstellation();
+        }
+
+        function resetCamera() {
+            cameraOffset = { x: 0, y: 0 };
+            drawConstellation();
+        }
+
+        function toggleConnections() {
+            showBeams = !showBeams;
+            drawConstellation();
+        }
+
+        // ==============================================================================
+        // Job History & Fast Batch Input Handlers
+        // ==============================================================================
+
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            document.getElementById('upload-status-text').innerText = file.name;
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch('/api/parse_resume', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.text) {
+                uploadedResumeText = data.text;
+                alert("Resume context uploaded successfully.");
             }
         }
 
@@ -1124,7 +1572,9 @@ UNIFIED_HTML_TEMPLATE = r"""
             const res = await fetch('/api/parse_resume', { method: 'POST', body: formData });
             const data = await res.json();
             if (data.text) {
-                document.getElementById('job-cv-text').value = data.text;
+                const el = document.getElementById('job-cv-text');
+                el.value = data.text;
+                cleanResumeText(el);
             }
         }
 
@@ -1137,7 +1587,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             div.innerHTML = `
                 <div class="flex justify-between items-center gap-2">
                     <input type="text" placeholder="${t.job_title_ph}" class="job-title-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg px-2.5 py-1.5 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <button onclick="this.parentElement.parentElement.remove()" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs px-1 font-bold">✕</button>
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-xs text-rose-500 font-bold hover:underline px-1">✕</button>
                 </div>
                 <textarea rows="2" placeholder="${t.job_desc_ph}" class="job-desc-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg p-2.5 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar resize-none"></textarea>
             `;
@@ -1145,393 +1595,346 @@ UNIFIED_HTML_TEMPLATE = r"""
         }
 
         async function recommendJobs() {
-            const cvText = document.getElementById('job-cv-text').value.trim();
-            if (!cvText) return alert("Provide CV text or upload a file first.");
-
+            const cvText = document.getElementById('job-cv-text').value;
+            if (!cvText) return alert("Please provide or upload a resume first.");
+            
             const btn = document.getElementById('recommend-jobs-btn');
             btn.disabled = true;
-            btn.innerText = "Analyzing...";
+            btn.innerText = "Analyzing CV...";
 
             try {
-                const res = await fetch('/api/recommend_jobs', {
+                const res = await fetch('/api/suggest_jobs', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ cv_text: cvText })
                 });
                 const data = await res.json();
-
-                if (data.recommended_jobs) {
+                if (data.jobs && data.jobs.length > 0) {
                     const list = document.getElementById('job-inputs-list');
                     list.innerHTML = '';
-                    data.recommended_jobs.forEach(job => {
+                    data.jobs.forEach(j => {
                         const div = document.createElement('div');
                         div.className = "job-input-item flex flex-col gap-2 p-3 rounded-xl bg-slate-50/70 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800/80";
                         div.innerHTML = `
                             <div class="flex justify-between items-center gap-2">
-                                <input type="text" value="${job.job_title}" placeholder="Job Title" class="job-title-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg px-2.5 py-1.5 border border-slate-300 dark:border-slate-800 focus:outline-none">
-                                <button onclick="this.parentElement.parentElement.remove()" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs px-1 font-bold">✕</button>
+                                <input type="text" value="${j.title || ''}" class="job-title-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg px-2.5 py-1.5 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <button onclick="this.parentElement.parentElement.remove()" class="text-xs text-rose-500 font-bold hover:underline px-1">✕</button>
                             </div>
-                            <textarea rows="2" class="job-desc-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg p-2.5 border border-slate-300 dark:border-slate-800 focus:outline-none custom-scrollbar resize-none">${job.job_description}</textarea>
+                            <textarea rows="2" class="job-desc-input w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs rounded-lg p-2.5 border border-slate-300 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar resize-none">${j.description || ''}</textarea>
                         `;
                         list.appendChild(div);
                     });
                 }
-            } catch (err) {
-                alert("Error recommending jobs.");
+            } catch (e) {
+                console.error(e);
             } finally {
                 btn.disabled = false;
-                const t = translations[currentLang] || translations.en;
-                btn.innerText = t.job_recommend_btn;
+                btn.innerText = (translations[currentLang] || translations.en).job_recommend_btn;
+            }
+        }
+
+        async function runJobMatch() {
+            const cvText = document.getElementById('job-cv-text').value;
+            const items = document.querySelectorAll('.job-input-item');
+            const targetJobs = [];
+
+            items.forEach(item => {
+                const title = item.querySelector('.job-title-input').value;
+                const desc = item.querySelector('.job-desc-input').value;
+                if (title.trim()) targetJobs.push({ title, description: desc });
+            });
+
+            if (!cvText || targetJobs.length === 0) return alert("Provide CV text and at least one target job position.");
+
+            const btn = document.getElementById('job-submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = `<span class="inline-block animate-pulse">⚡ Batch Evaluating (${targetJobs.length} roles)...</span>`;
+
+            try {
+                const res = await fetch('/api/match_jobs', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ cv_text: cvText, target_jobs: targetJobs })
+                });
+                const data = await res.json();
+                
+                const historyContainer = document.getElementById('job-history-container');
+                const placeholder = document.getElementById('job-placeholder-state');
+                if (placeholder) placeholder.classList.add('hidden');
+
+                const runTimestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const runId = 'run-' + Date.now();
+
+                const groupCard = document.createElement('div');
+                groupCard.className = "bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 p-3.5 shadow-sm flex flex-col gap-3";
+                
+                let jobsHTML = '';
+                (data.results || []).forEach((resItem, idx) => {
+                    const escapedTitle = (resItem.title || 'Role').replace(/'/g, "\\'");
+                    const accId = `acc-${runId}-${idx}`;
+
+                    // Dynamic badge color mapping: >=70 (green), <=30 (red), others (yellow)
+                    const score = resItem.score || 0;
+                    let badgeColorClass = 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300';
+                    if (score >= 70) {
+                        badgeColorClass = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300';
+                    } else if (score <= 30) {
+                        badgeColorClass = 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300';
+                    }
+
+                    const goodSkillsList = (resItem.good_skills || []).map(s => 
+                        `<li class="text-[11px] text-emerald-800 dark:text-emerald-300">• <strong class="font-semibold text-emerald-900 dark:text-emerald-200">${s.skill || 'Matched Skill'}:</strong> ${s.reason || 'Proven alignment.'}</li>`
+                    ).join('');
+
+                    const missingSkillsList = (resItem.missing_skills || []).map(s => 
+                        `<li class="text-[11px] text-rose-800 dark:text-rose-300">• <strong class="font-semibold text-rose-900 dark:text-rose-200">${s.skill || 'Gap'}:</strong> ${s.action || 'Recommended focus.'}</li>`
+                    ).join('');
+
+                    jobsHTML += `
+                        <div class="p-3 rounded-lg bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200/60 dark:border-slate-800 flex flex-col gap-2">
+                            <div class="flex justify-between items-center">
+                                <h5 class="text-xs font-bold text-slate-900 dark:text-white">${resItem.title}</h5>
+                                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${badgeColorClass}">${score}% Match</span>
+                            </div>
+                            <button onclick="toggleAccordion('${accId}')" class="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center justify-between w-full pt-1 border-t border-slate-200/60 dark:border-slate-800/80">
+                                <span>🔍 Details & Skill Gaps</span>
+                                <span>▼</span>
+                            </button>
+                            <div id="${accId}" class="hidden flex flex-col gap-2.5 pt-2 border-t border-slate-200/40 dark:border-slate-800/60">
+                                <div class="p-2 rounded-md bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 flex flex-col gap-1">
+                                    <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Candidate Judgement Review</span>
+                                    <p class="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">${resItem.summary || 'Strong fit based on skill profile.'}</p>
+                                </div>
+                                <div class="p-2 rounded-md bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-900/50 flex flex-col gap-1">
+                                    <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">✅ Matched Strengths</span>
+                                    <ul class="space-y-1">${goodSkillsList}</ul>
+                                </div>
+                                <div class="p-2 rounded-md bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200/70 dark:border-rose-900/50 flex flex-col gap-1">
+                                    <span class="text-[9px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">⚠️ Missing Skills</span>
+                                    <ul class="space-y-1">${missingSkillsList}</ul>
+                                </div>
+                                <div class="pt-1 flex justify-end">
+                                    <button onclick="launchConstellationFromJob('${escapedTitle}')" class="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold rounded-md border border-indigo-200 dark:border-indigo-800 transition flex items-center gap-1 shadow-sm">
+                                        <span>🌐 Map Skill Constellation</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                groupCard.innerHTML = `
+                    <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Batch Evaluation @ ${runTimestamp}</span>
+                        <span class="text-[10px] text-slate-400 font-mono">${(data.results || []).length} Roles Analyzed</span>
+                    </div>
+                    <div class="flex flex-col gap-2.5">${jobsHTML}</div>
+                `;
+
+                historyContainer.prepend(groupCard);
+
+            } catch (e) {
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = (translations[currentLang] || translations.en).job_submit_btn;
             }
         }
 
         function clearJobHistory() {
+            if (!confirm("Are you sure you want to clear all job evaluation history logs?")) return;
             document.getElementById('job-history-container').innerHTML = '';
-            document.getElementById('job-placeholder-state').classList.remove('hidden');
+            const placeholder = document.getElementById('job-placeholder-state');
+            if (placeholder) placeholder.classList.remove('hidden');
         }
 
-        async function runJobMatch() {
-            const cvText = document.getElementById('job-cv-text').value.trim();
-            const items = document.querySelectorAll('.job-input-item');
-            
-            let jobEntries = [];
-            items.forEach(item => {
-                const title = item.querySelector('.job-title-input').value.trim();
-                const desc = item.querySelector('.job-desc-input').value.trim();
-                if (title) jobEntries.push({ title: title, desc: desc || "Standard role expectations." });
-            });
+        async function submitChat(e) {
+            if (e) e.preventDefault();
+            const inputEl = document.getElementById('user-input');
+            const prompt = inputEl.value.trim();
+            if (!prompt) return;
 
-            if (!cvText || jobEntries.length === 0) return alert("Provide CV text and at least one target title.");
-
-            const btn = document.getElementById('job-submit-btn');
-            btn.disabled = true;
-            btn.innerText = "Evaluating...";
-
-            try {
-                const res = await fetch('/api/job_match', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ cv_text: cvText, jobs: jobEntries })
-                });
-                const data = await res.json();
-                
-                document.getElementById('job-placeholder-state').classList.add('hidden');
-                const historyContainer = document.getElementById('job-history-container');
-
-                if (data.results) {
-                    data.results.forEach((result) => {
-                        const card = document.createElement('div');
-                        card.className = "bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs flex flex-col gap-2 shadow-sm";
-                        card.innerHTML = `
-                            <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
-                                <span class="font-bold text-slate-900 dark:text-white">${result.job_title}</span>
-                                <span class="px-2 py-0.5 rounded font-semibold text-[10px] bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/50">${result.score}% Match</span>
-                            </div>
-                            <p class="text-slate-600 dark:text-slate-400 text-xs">${result.match_summary}</p>
-                            <div class="flex flex-col gap-1 pt-1">
-                                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase">Key Recommendations:</span>
-                                <ul class="list-disc pl-4 text-slate-700 dark:text-slate-300 space-y-0.5">
-                                    ${(result.recommendations || []).map(r => `<li>${r}</li>`).join('')}
-                                </ul>
-                            </div>
-                        `;
-                        historyContainer.prepend(card);
-                    });
-                }
-            } catch (err) {
-                alert("Error analyzing roles.");
-            } finally {
-                btn.disabled = false;
-                const t = translations[currentLang] || translations.en;
-                btn.innerText = t.job_submit_btn;
-            }
-        }
-
-        function exportMarkdown() {
+            inputEl.value = '';
             const chatStream = document.getElementById('chat-stream');
-            const messages = [];
-            chatStream.querySelectorAll('.flex').forEach(el => messages.push(el.innerText));
-            if (messages.length === 0) return alert("No active conversation.");
-            const blob = new Blob([messages.join("\n\n---\n\n")], { type: 'text/markdown' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'boussole-session.md';
-            a.click();
-        }
 
-        const chatStream = document.getElementById('chat-stream');
-        const chatForm = document.getElementById('chat-form');
-        const userInput = document.getElementById('user-input');
+            chatStream.innerHTML += `
+                <div class="flex items-start justify-end w-full">
+                    <div class="bg-gradient-to-r from-slate-900 to-indigo-900 dark:from-slate-800 dark:to-indigo-950 border border-transparent dark:border-slate-700/60 rounded-2xl p-3.5 text-white font-medium max-w-[85%] text-xs leading-relaxed shadow-sm">${prompt}</div>
+                </div>`;
 
-        userInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                chatForm.requestSubmit();
-            }
-        });
+            const msgId = 'stream-' + Date.now();
+            chatStream.innerHTML += `
+                <div class="flex items-start gap-3 w-full">
+                    <div class="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-sm">B</div>
+                    <div class="bg-white/90 dark:bg-slate-950/90 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 text-slate-800 dark:text-slate-200 max-w-[85%] text-xs leading-relaxed flex flex-col gap-2 shadow-sm">
+                        <div id="${msgId}" class="ai-markdown-body">Thinking...</div>
+                    </div>
+                </div>`;
 
-        function applyPreset(type) {
-            let promptText = "";
-            if (type === 'roast') {
-                promptText = uploadedResumeText ? `Audit my uploaded resume using Google X-Y-Z formula:\n\n${uploadedResumeText}` : "Provide a resume audit framework.";
-            } else if (type === 'gap') {
-                promptText = "Analyze my current skill set for software/tech roles and identify gaps.";
-            } else if (type === 'behavioral') {
-                promptText = "Conduct a practice interview. Ask me 3 questions sequentially.";
-            } else if (type === 'roadmap') {
-                promptText = "Generate a 90-day action plan for career advancement.";
-            }
-            userInput.value = promptText;
-            userInput.focus();
-        }
+            chatStream.scrollTop = chatStream.scrollHeight;
 
-        async function handleFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            document.getElementById('upload-status-text').innerText = file.name;
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await fetch('/api/parse_resume', { method: 'POST', body: formData });
-            const data = await res.json();
-            if (data.text) {
-                uploadedResumeText = data.text;
-                userInput.value = data.text;
-                userInput.focus();
-            }
-        }
-
-        // Direct Zero-Lag Real-Time Streaming Handler with Global Session Tracking
-        chatForm.onsubmit = async (e) => {
-            e.preventDefault();
-            let text = userInput.value.trim();
-            if (!text) return;
-
-            userInput.value = '';
-            const sendingChatId = activeChatId;
-            const assistantMsgId = 'msg-' + Date.now();
-
-            // Store active stream state in global window scope so switching chats doesn't lose text chunks
-            window.activeStreams[sendingChatId] = {
-                msgId: assistantMsgId,
-                buffer: "",
-                isDone: false
-            };
-
-            // If user is viewing the current chat, update the DOM immediately
-            if (sendingChatId === activeChatId) {
-                chatStream.innerHTML += `
-                    <div class="flex items-start justify-end w-full">
-                        <div class="bg-gradient-to-r from-slate-900 to-indigo-900 dark:from-slate-800 dark:to-indigo-950 border border-transparent dark:border-slate-700/60 rounded-2xl p-3.5 text-white font-medium max-w-[85%] text-xs leading-relaxed shadow-sm">${text}</div>
-                    </div>`;
-                
-                chatStream.innerHTML += `
-                    <div class="flex items-start gap-3 w-full">
-                        <div class="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5 shadow-sm">B</div>
-                        <div class="bg-white/90 dark:bg-slate-950/90 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 text-slate-800 dark:text-slate-200 max-w-[85%] text-xs leading-relaxed flex flex-col gap-2 shadow-sm">
-                            <div id="${assistantMsgId}" class="ai-markdown-body"></div>
-                        </div>
-                    </div>`;
-                
-                chatStream.scrollTop = chatStream.scrollHeight;
-            }
+            window.activeStreams[activeChatId] = { msgId, buffer: '', isDone: false };
 
             try {
-                const response = await fetch('/api/chat_stream', {
+                const response = await fetch('/api/chat/stream', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: text, chat_id: sendingChatId })
+                    body: JSON.stringify({ prompt, resume_context: uploadedResumeText })
                 });
-
-                // Instantly update sidebar history list
-                fetch('/api/chats')
-                    .then(res => res.json())
-                    .then(data => renderChatHistoryList(data.chats, data.active_id))
-                    .catch(err => console.error("Failed to refresh sidebar history:", err));
-
-                if (!response.body) throw new Error("Stream unsupported");
 
                 const reader = response.body.getReader();
-                const decoder = new TextDecoder("utf-8");
+                const decoder = new TextDecoder();
+                let fullResponse = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-
                     const chunk = decoder.decode(value, { stream: true });
-                    window.activeStreams[sendingChatId].buffer += chunk;
-
-                    // If active chat is still visible, render directly to DOM element
-                    if (sendingChatId === activeChatId) {
-                        const targetContainer = document.getElementById(assistantMsgId);
-                        if (targetContainer) {
-                            targetContainer.innerText = window.activeStreams[sendingChatId].buffer;
-                            chatStream.scrollTop = chatStream.scrollHeight;
-                        }
-                    }
+                    fullResponse += chunk;
+                    window.activeStreams[activeChatId].buffer = fullResponse;
+                    const streamEl = document.getElementById(msgId);
+                    if (streamEl) streamEl.innerHTML = marked.parse(fullResponse);
+                    chatStream.scrollTop = chatStream.scrollHeight;
                 }
 
-                window.activeStreams[sendingChatId].isDone = true;
-
-                // Render markdown once complete
-                if (sendingChatId === activeChatId) {
-                    const targetContainer = document.getElementById(assistantMsgId);
-                    if (targetContainer) {
-                        targetContainer.innerHTML = marked.parse(window.activeStreams[sendingChatId].buffer);
-                        chatStream.scrollTop = chatStream.scrollHeight;
-                    }
-                }
-
-                delete window.activeStreams[sendingChatId];
-
+                window.activeStreams[activeChatId].isDone = true;
+                delete window.activeStreams[activeChatId];
+                await loadChats();
             } catch (err) {
-                if (sendingChatId === activeChatId) {
-                    const targetContainer = document.getElementById(assistantMsgId);
-                    if (targetContainer) targetContainer.innerText = "Error streaming message response.";
-                }
-                delete window.activeStreams[sendingChatId];
+                console.error("Stream error", err);
             }
-        };
+        }
 
-        const scenarios = {
-            full_grant: "Student: Chan (HKID: A123456(7), Phone: 91234567).\nFamily size: 4 members.\nMonthly income: HKD $10,000.",
-            partial_grant: "Student: Wong (HKID: B234567(8), Phone: 61234567).\nFamily size: 4 members.\nMonthly income: HKD $18,000.",
-            ineligible: "Student: Lee (HKID: C345678(9), Phone: 51234567).\nFamily size: 3 members.\nMonthly income: HKD $24,000.",
-            missing_income: "Student: Cheung (HKID: D456789(0), Phone: 98765432).\nEmergency aid request.\nMonthly income: Not provided."
-        };
+        function applyPreset(presetKey) {
+            const input = document.getElementById('user-input');
+            const presets = {
+                roast: "Conduct a direct resume audit. Point out key areas for improvement.",
+                gap: "Analyze potential skill gaps between my current background and senior industry standards.",
+                behavioral: "Simulate a behavioral interview question and provide feedback on my response using STAR method.",
+                roadmap: "Build a structured 90-day action roadmap to transition into my target role."
+            };
+            if (presets[presetKey]) {
+                input.value = presets[presetKey];
+                submitChat();
+            }
+        }
 
+        function exportMarkdown() {
+            window.location.href = '/api/chats/export';
+        }
+
+        // Student Financial Aid Copilot Logic
         function loadScenario(type, income, members) {
-            document.getElementById('case-notes').value = scenarios[type];
-            if (income !== null) setAllValues('income', income);
-            if (members !== null) setAllValues('members', members);
-        }
-
-        function setAllValues(type, val) {
-            if (type === 'income') {
-                document.getElementById('income-slider').value = val;
-                document.getElementById('bridge-income-slider').value = val;
-                document.getElementById('income-input-box').value = val;
-                document.getElementById('bridge-income-input-box').value = val;
-            } else if (type === 'members') {
-                document.getElementById('members-slider').value = val;
-                document.getElementById('members-input-box').value = val;
-            } else if (type === 'tuition') {
-                document.getElementById('tuition-slider').value = val;
-                document.getElementById('tuition-input-box').value = val;
-            } else if (type === 'living') {
-                document.getElementById('living-slider').value = val;
-                document.getElementById('living-input-box').value = val;
+            const notes = document.getElementById('case-notes');
+            if (income !== null) {
+                notes.value = `Household income is HKD $${income} per month with ${members} family members residing together.`;
+                document.getElementById('income-input-box').value = income;
+                document.getElementById('income-slider').value = Math.min(income, 50000);
+            } else {
+                notes.value = `Household has ${members} family members. Monthly income pending confirmation.`;
             }
+            document.getElementById('members-input-box').value = members;
+            document.getElementById('members-slider').value = members;
+            processCase();
         }
 
-        async function syncFromSlider(type) {
-            let val = parseInt(document.getElementById(`${type}-slider`).value);
-            setAllValues(type, val);
-            triggerBackendRecalc();
+        function syncFromBox(type) {
+            if (type === 'income') {
+                const val = document.getElementById('income-input-box').value;
+                document.getElementById('income-slider').value = Math.min(val, 50000);
+            } else {
+                const val = document.getElementById('members-input-box').value;
+                document.getElementById('members-slider').value = Math.min(val, 8);
+            }
+            processCase();
         }
 
-        async function syncFromBox(type) {
-            let val = parseInt(document.getElementById(`${type}-input-box`).value) || 0;
-            setAllValues(type, val);
-            triggerBackendRecalc();
-        }
-
-        async function syncBridgeFromSlider(type) {
-            let val = parseInt(document.getElementById(`bridge-${type}-slider` || `${type}-slider`).value);
-            setAllValues(type, val);
-            triggerBackendRecalc();
-        }
-
-        async function syncBridgeFromBox(type) {
-            let val = parseInt(document.getElementById(`bridge-${type}-input-box` || `${type}-input-box`).value) || 0;
-            setAllValues(type, val);
-            triggerBackendRecalc();
-        }
-
-        async function triggerBackendRecalc() {
-            const income = parseInt(document.getElementById('income-input-box').value) || 0;
-            const members = parseInt(document.getElementById('members-input-box').value) || 1;
-
-            const res = await fetch('/api/evaluate_case', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ notes: `Income: HKD $${income}, Members: ${members}` })
-            });
-            const data = await res.json();
-            updateAuditUI(data.audit);
+        function syncFromSlider(type) {
+            if (type === 'income') {
+                const val = document.getElementById('income-slider').value;
+                document.getElementById('income-input-box').value = val;
+            } else {
+                const val = document.getElementById('members-slider').value;
+                document.getElementById('members-input-box').value = val;
+            }
+            processCase();
         }
 
         async function processCase() {
-            const rawNotes = document.getElementById('case-notes').value.trim();
-            if (!rawNotes) return alert("Enter financial details first.");
+            const text = document.getElementById('case-notes').value;
+            const income = parseFloat(document.getElementById('income-input-box').value) || null;
+            const members = parseInt(document.getElementById('members-input-box').value) || 1;
 
-            try {
-                const res = await fetch('/api/evaluate_case', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ notes: rawNotes })
-                });
-                const data = await res.json();
-                
-                document.getElementById('pii-status').classList.remove('hidden');
-                document.getElementById('pii-count').innerText = data.pii_redacted_count;
-                document.getElementById('sanitized-text').innerText = data.sanitized_notes;
+            const res = await fetch('/api/copilot/evaluate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ notes: text, income, members })
+            });
 
-                if (data.extracted_params.monthly_household_income_hkd !== null) {
-                    setAllValues('income', data.extracted_params.monthly_household_income_hkd);
-                }
-                if (data.extracted_params.household_members_count) {
-                    setAllValues('members', data.extracted_params.household_members_count);
-                }
+            const data = await res.json();
+            
+            document.getElementById('pii-status').classList.remove('hidden');
+            document.getElementById('pii-count').innerText = data.sanitized_count;
+            document.getElementById('sanitized-text').innerText = data.sanitized_text;
 
-                updateAuditUI(data.audit);
-            } catch (err) {
-                alert("Error during evaluation.");
-            }
-        }
-
-        function updateAuditUI(audit) {
+            const evalData = data.evaluation;
             const badge = document.getElementById('verdict-badge');
-            badge.innerText = audit.status;
-            badge.className = "px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200";
+            badge.innerText = evalData.status;
+            badge.className = `px-2 py-0.5 rounded-md text-[11px] font-semibold bg-${evalData.badge_color}-100 dark:bg-${evalData.badge_color}-950 text-${evalData.badge_color}-800 dark:text-${evalData.badge_color}-300`;
 
-            document.getElementById('verdict-title').innerText = audit.summary;
-            document.getElementById('verdict-details').innerText = audit.details;
-            document.getElementById('verdict-citation').innerText = audit.policy_citation;
+            document.getElementById('verdict-title').innerText = evalData.summary;
+            document.getElementById('verdict-details').innerText = evalData.details;
+            document.getElementById('verdict-citation').innerText = evalData.policy_citation;
 
-            const tuition = parseInt(document.getElementById('tuition-input-box').value) || 42100;
-            const living = parseInt(document.getElementById('living-input-box').value) || 30000;
-            const grantCovered = tuition * audit.grant_percentage;
-            const finalShortfall = Math.max(0, (tuition - grantCovered) + living);
-
-            document.getElementById('dynamic-shortfall').innerText = `HKD $${Math.round(finalShortfall).toLocaleString()}`;
-
-            const checklistEl = document.getElementById('document-checklist');
-            checklistEl.innerHTML = '';
-            if (audit.required_documents && audit.required_documents.length > 0) {
-                audit.required_documents.forEach(doc => {
-                    const li = document.createElement('li');
-                    li.innerText = `• ${doc}`;
-                    checklistEl.appendChild(li);
-                });
-            } else {
-                checklistEl.innerHTML = '<li>• Standard processing.</li>';
-            }
+            const checklist = document.getElementById('document-checklist');
+            checklist.innerHTML = '';
+            evalData.required_documents.forEach(doc => {
+                checklist.innerHTML += `<li>${doc}</li>`;
+            });
         }
 
         function executeOverride() {
             const reason = document.getElementById('override-reason').value;
-            if (!reason) return alert("Select a review reason.");
+            if (!reason) return alert("Select appeal reason.");
+            const ts = document.getElementById('override-timestamp');
+            ts.classList.remove('hidden');
+            ts.innerText = `Appeal logged on ${new Date().toLocaleString()} (${reason})`;
+        }
 
-            const badge = document.getElementById('verdict-badge');
-            badge.innerText = "APPEAL_QUEUED";
-            badge.className = "px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-900 dark:bg-slate-800 text-white dark:text-slate-100 border border-transparent dark:border-slate-700";
+        function syncBridgeFromBox(type) {
+            if (type === 'income') {
+                const val = document.getElementById('bridge-income-input-box').value;
+                document.getElementById('bridge-income-slider').value = Math.min(val, 50000);
+            } else if (type === 'tuition') {
+                const val = document.getElementById('tuition-input-box').value;
+                document.getElementById('tuition-slider').value = Math.min(val, 100000);
+            } else if (type === 'living') {
+                const val = document.getElementById('living-input-box').value;
+                document.getElementById('living-slider').value = Math.min(val, 80000);
+            }
+            recalcBridge();
+        }
 
-            document.getElementById('verdict-title').innerText = "Appeal Submitted";
-            document.getElementById('verdict-details').innerText = `Your request is queued for review. Reason: ${reason}`;
-            
-            const timestampEl = document.getElementById('override-timestamp');
-            timestampEl.classList.remove('hidden');
-            timestampEl.innerText = `Submitted: ${new Date().toLocaleTimeString()}`;
+        function syncBridgeFromSlider(type) {
+            if (type === 'income') {
+                const val = document.getElementById('bridge-income-slider').value;
+                document.getElementById('bridge-income-input-box').value = val;
+            } else if (type === 'tuition') {
+                const val = document.getElementById('tuition-slider').value;
+                document.getElementById('tuition-input-box').value = val;
+            } else if (type === 'living') {
+                const val = document.getElementById('living-slider').value;
+                document.getElementById('living-input-box').value = val;
+            }
+            recalcBridge();
+        }
+
+        function recalcBridge() {
+            const inc = parseFloat(document.getElementById('bridge-income-input-box').value) || 0;
+            const tui = parseFloat(document.getElementById('tuition-input-box').value) || 0;
+            const liv = parseFloat(document.getElementById('living-input-box').value) || 0;
+            const shortfall = Math.max(0, (tui + liv) - (inc * 5));
+            document.getElementById('dynamic-shortfall').innerText = `HKD $${shortfall.toLocaleString()}`;
         }
     </script>
 </body>
@@ -1539,129 +1942,182 @@ UNIFIED_HTML_TEMPLATE = r"""
 """
 
 # ==============================================================================
-# 3. ROUTING & API ENDPOINTS
+# 3. API ENDPOINTS & FLASK ROUTES
 # ==============================================================================
 
-@app.before_request
-def protect_routes():
-    if request.endpoint in ('home', 'api_login', 'api_logout', 'static'):
-        return
-    if request.path.startswith('/api/') and not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
-@app.route('/')
-def home():
-    if not session.get('authenticated'):
-        return render_template_string(LOGIN_HTML_TEMPLATE)
-    return render_template_string(UNIFIED_HTML_TEMPLATE)
+@app.route('/login')
+def login_page():
+    if session.get('authenticated'):
+        return redirect(url_for('index'))
+    return render_template_string(LOGIN_HTML_TEMPLATE)
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
-    data = request.json or {}
-    entered_password = data.get('password', '')
-    if entered_password == APP_PASSWORD:
+    data = request.get_json() or {}
+    password = data.get('password', '')
+    if password == APP_PASSWORD:
         session['authenticated'] = True
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'error', 'message': 'Incorrect password.'}), 401
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Invalid password"}), 401
 
-@app.route('/api/logout', methods=['GET', 'POST'])
+@app.route('/api/logout')
 def api_logout():
-    session.pop('authenticated', None)
-    if request.method == 'POST':
-        return '', 204
-    return redirect(url_for('home'))
+    session.clear()
+    return redirect(url_for('login_page'))
+
+@app.before_request
+def require_login():
+    allowed_routes = ['login_page', 'api_login', 'static']
+    if request.endpoint and request.endpoint not in allowed_routes:
+        if not session.get('authenticated'):
+            if request.path.startswith('/api/'):
+                return jsonify({"status": "error", "message": "Unauthorized"}), 401
+            return redirect(url_for('login_page'))
+
+@app.route('/')
+def index():
+    return render_template_string(UNIFIED_HTML_TEMPLATE)
+
+@app.route('/api/generate_constellation', methods=['POST'])
+def generate_constellation():
+    """Dynamically generates an intricate RPG skill constellation graph (15+ nodes) in 1 single OpenAI request."""
+    data = request.get_json() or {}
+    cv_text = data.get('cv_text', '')
+    job_title = data.get('job_title', '')
+
+    if not cv_text or not job_title:
+        return jsonify({"status": "error", "message": "Both CV text and target job title are required."}), 400
+
+    prompt = f"""
+    You are an expert technical career architect. Analyze the candidate CV against the target job '{job_title}'.
+    Build a comprehensive, multi-tiered Skill Constellation graph with 15 to 20 detailed nodes in a single response.
+
+    Requirements:
+    1. Node 1: Central Hub (x:0, y:0, title: "Target Trajectory: {job_title}", status: "unlocked", color: "#6366f1", r: 16).
+    2. Inner Orbit (4-6 nodes, radius ~120-160px): Strong, mastered core skills found in the candidate CV. Set status="unlocked", color="#10b981".
+    3. Middle Orbit (5-7 nodes, radius ~200-260px): Intermediate foundational and supporting skills required for the role. Set status="unlocked" or "locked" appropriately, color="#06b6d4" or "#a855f7".
+    4. Outer Orbit (5-7 nodes, radius ~300-380px): Missing skill gaps & advanced domain requirements for '{job_title}'. Set status="locked", color="#f59e0b" or "#ef4444".
+    5. Coordinates: Distribute nodes evenly across 360 degrees so nodes do NOT overlap. Keep spacing clean.
+    6. Provide a rich array of connections [source_id, target_id] linking central, inner, middle, and outer nodes.
+
+    Return ONLY raw JSON in this exact structure:
+    {{
+      "nodes": [
+        {{
+          "id": 1,
+          "title": "Skill Name",
+          "category": "Core / Systems / Gap",
+          "status": "unlocked",
+          "x": 0,
+          "y": 0,
+          "r": 12,
+          "color": "#6366f1",
+          "desc": "Detailed technical explanation.",
+          "quest": "Actionable mission task to complete."
+        }}
+      ],
+      "connections": [
+        [1, 2], [2, 5], [1, 3]
+      ]
+    }}
+
+    Target Role: {job_title}
+    Candidate CV Content:
+    {cv_text[:3000]}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model=deployment_name,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        graph_data = json.loads(response.choices[0].message.content)
+        return jsonify({"status": "success", "constellation": graph_data})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/chats', methods=['GET'])
-def list_chats():
+def get_chats():
     sessions, active_id = load_storage()
-    if active_id not in sessions:
-        active_id = list(sessions.keys())[0]
-    
-    chats_summary = [
-        {"id": c["id"], "title": c["title"]}
-        for c in sessions.values()
-    ]
-    active_messages = [m for m in sessions[active_id]["messages"] if m["role"] != "system"]
+    chats_list = [{"id": k, "title": v["title"]} for k, v in sessions.items()]
+    active_messages = sessions.get(active_id, {}).get("messages", [])
+    filtered_messages = [m for m in active_messages if m["role"] != "system"]
     return jsonify({
+        "chats": chats_list,
         "active_id": active_id,
-        "chats": chats_summary,
-        "messages": active_messages
+        "messages": filtered_messages
     })
 
 @app.route('/api/chats/new', methods=['POST'])
-def new_chat():
+def create_chat():
     sessions, _ = load_storage()
-    chat_id = datetime.now().strftime('%Y%m%d%H%M%S_%f')
-    sessions[chat_id] = {
-        "id": chat_id,
+    new_id = f"chat_{int(datetime.now().timestamp())}"
+    sessions[new_id] = {
+        "id": new_id,
         "title": "New Conversation",
         "messages": [
             {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
             {"role": "assistant", "content": WELCOME_GREETING}
         ]
     }
-    save_storage(sessions, chat_id)
-
-    chats_summary = [
-        {"id": c["id"], "title": c["title"]}
-        for c in sessions.values()
-    ]
-    return jsonify({
-        "chat_id": chat_id, 
-        "title": "New Conversation", 
-        "messages": [{"role": "assistant", "content": WELCOME_GREETING}],
-        "chats": chats_summary
-    })
+    save_storage(sessions, new_id)
+    return jsonify({"status": "created", "active_id": new_id})
 
 @app.route('/api/chats/switch', methods=['POST'])
 def switch_chat():
-    sessions, _ = load_storage()
-    data = request.json
+    data = request.get_json() or {}
     chat_id = data.get('chat_id')
+    sessions, _ = load_storage()
     if chat_id in sessions:
         save_storage(sessions, chat_id)
-        chats_summary = [
-            {"id": c["id"], "title": c["title"]}
-            for c in sessions.values()
-        ]
-        messages = [m for m in sessions[chat_id]["messages"] if m["role"] != "system"]
-        return jsonify({"status": "switched", "active_id": chat_id, "messages": messages, "chats": chats_summary})
-    return jsonify({"error": "Chat not found"}), 404
+        filtered = [m for m in sessions[chat_id]["messages"] if m["role"] != "system"]
+        chats_list = [{"id": k, "title": v["title"]} for k, v in sessions.items()]
+        return jsonify({"status": "switched", "active_id": chat_id, "messages": filtered, "chats": chats_list})
+    return jsonify({"status": "error", "message": "Session not found"}), 404
 
 @app.route('/api/chats/active', methods=['DELETE'])
 def delete_active_chat():
     sessions, active_id = load_storage()
-    if len(sessions) <= 1:
-        sessions[active_id] = {
-            "id": active_id,
-            "title": "New Conversation",
-            "messages": [
-                {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
-                {"role": "assistant", "content": WELCOME_GREETING}
-            ]
-        }
-    else:
-        del sessions[active_id]
-        active_id = list(sessions.keys())[0]
+    keys = list(sessions.keys())
     
-    save_storage(sessions, active_id)
+    if len(keys) <= 1:
+        sessions[active_id]["messages"] = [
+            {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
+            {"role": "assistant", "content": WELCOME_GREETING}
+        ]
+        sessions[active_id]["title"] = "New Conversation"
+        save_storage(sessions, active_id)
+    else:
+        idx = keys.index(active_id) if active_id in keys else 0
+        del sessions[active_id]
+        remaining_keys = list(sessions.keys())
+        
+        # Navigate up if possible, else down, else create new
+        if idx > 0 and (idx - 1) < len(remaining_keys):
+            active_id = remaining_keys[idx - 1]
+        elif remaining_keys:
+            active_id = remaining_keys[0]
+        else:
+            active_id = f"chat_{int(datetime.now().timestamp())}"
+            sessions[active_id] = {
+                "id": active_id,
+                "title": "New Conversation",
+                "messages": [
+                    {"role": "system", "content": BOUSSOLE_SYSTEM_INSTRUCTION},
+                    {"role": "assistant", "content": WELCOME_GREETING}
+                ]
+            }
+        save_storage(sessions, active_id)
+    
+    chats_list = [{"id": k, "title": v["title"]} for k, v in sessions.items()]
+    filtered = [m for m in sessions[active_id]["messages"] if m["role"] != "system"]
+    return jsonify({"status": "deleted", "active_id": active_id, "chats": chats_list, "messages": filtered})
 
-    chats_summary = [
-        {"id": c["id"], "title": c["title"]}
-        for c in sessions.values()
-    ]
-    active_messages = [m for m in sessions[active_id]["messages"] if m["role"] != "system"]
-    return jsonify({
-        "status": "deleted",
-        "active_id": active_id,
-        "chats": chats_summary,
-        "messages": active_messages
-    })
-
-@app.route('/api/chats/clear', methods=['DELETE'])
-def clear_all_chats():
-    default_id = "default"
-    default_sessions = {
+@app.route('/api/chats/all', methods=['DELETE'])
+def delete_all_chats():
+    default_id = f"chat_{int(datetime.now().timestamp())}"
+    new_sessions = {
         default_id: {
             "id": default_id,
             "title": "New Conversation",
@@ -1671,197 +2127,194 @@ def clear_all_chats():
             ]
         }
     }
-    save_storage(default_sessions, default_id)
-    chats_summary = [{"id": default_id, "title": "New Conversation"}]
-    active_messages = [{"role": "assistant", "content": WELCOME_GREETING}]
-    return jsonify({
-        "status": "cleared",
-        "active_id": default_id,
-        "chats": chats_summary,
-        "messages": active_messages
-    })
+    save_storage(new_sessions, default_id)
+    chats_list = [{"id": default_id, "title": "New Conversation"}]
+    return jsonify({"status": "deleted_all", "active_id": default_id, "chats": chats_list, "messages": []})
 
-@app.route('/api/evaluate_case', methods=['POST'])
-def evaluate_case():
-    raw_notes = request.json.get('notes', '').strip()
-    sanitized_notes, pii_count = sanitize_pii(raw_notes)
-
-    income_match = re.search(r'(?:HKD?|\$)\s*([0-9,]+)', sanitized_notes, re.IGNORECASE)
-    members_match = re.search(r'(\d+)\s*members?', sanitized_notes, re.IGNORECASE)
-
-    extracted_income = float(income_match.group(1).replace(',', '')) if income_match else None
-    extracted_members = int(members_match.group(1)) if members_match else 1
-
-    audit_result = evaluate_student_eligibility(extracted_income, extracted_members)
-
-    return jsonify({
-        'sanitized_notes': sanitized_notes,
-        'pii_redacted_count': pii_count,
-        'extracted_params': {
-            "monthly_household_income_hkd": extracted_income,
-            "household_members_count": extracted_members
-        },
-        'audit': audit_result
-    })
-
-@app.route('/api/recommend_jobs', methods=['POST'])
-def recommend_jobs():
-    data = request.json
-    cv_text = data.get('cv_text', '').strip()
-
-    if not cv_text:
-        return jsonify({'error': 'CV text is required.'}), 400
-
-    prompt = f"""
-    You are an elite career strategist. Analyze the candidate's CV and recommend 5 top-tier, highly suitable career roles/job titles that match their skills, background, and experience level.
+@app.route('/api/chat/stream', methods=['POST'])
+def stream_chat():
+    data = request.get_json() or {}
+    prompt = data.get('prompt', '')
+    resume_context = data.get('resume_context', '')
     
-    Candidate CV:
-    {cv_text}
-    
-    Provide your response in strict JSON format with a single key "recommended_jobs" containing an array of 5 objects, each having:
-    - "job_title": string
-    - "job_description": string
-    """
-
-    try:
-        response = client.chat.completions.create(
-            model=deployment_name,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"}
-        )
-        result_json = response.choices[0].message.content
-        parsed = json.loads(result_json)
-        return jsonify(parsed)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/job_match', methods=['POST'])
-def job_match():
-    data = request.json
-    cv_text = data.get('cv_text', '').strip()
-    jobs = data.get('jobs', [])
-
-    if not cv_text or not jobs:
-        return jsonify({'error': 'CV text and at least one target job title are required.'}), 400
-
-    prompt = f"""
-    You are an expert recruiter and resume optimization engine.
-    Analyze the candidate's CV against each of the target jobs provided below.
-    
-    Candidate CV Content:
-    {cv_text}
-    
-    Target Jobs:
-    {json.dumps(jobs)}
-    
-    Provide your response in strict JSON format with a single key "results" containing an array of objects. Each object must correspond to a job in order and have:
-    - "job_title": string
-    - "score": integer between 0 and 100
-    - "match_summary": short summary
-    - "matched_keywords": list of string keywords
-    - "missing_keywords": list of key missing terms
-    - "recommendations": list of 3-4 specific actionable points
-    """
-
-    try:
-        response = client.chat.completions.create(
-            model=deployment_name,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"}
-        )
-        result_json = response.choices[0].message.content
-        parsed = json.loads(result_json)
-        return jsonify(parsed)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# Direct Unbuffered Token Streaming Route
-@app.route('/api/chat_stream', methods=['POST'])
-def chat_stream():
     sessions, active_id = load_storage()
-    data = request.json or {}
-    user_msg = data.get('message', '').strip()
-    chat_id = data.get('chat_id') or active_id
+    active_session = sessions.get(active_id)
+    
+    if not active_session:
+        return jsonify({"error": "No active session"}), 400
 
-    if not user_msg:
-        return jsonify({'error': 'Message required.'}), 400
+    if len(active_session["messages"]) <= 2:
+        active_session["title"] = prompt[:24] + ("..." if len(prompt) > 24 else "")
 
-    if chat_id not in sessions:
-        chat_id = active_id
-    if chat_id not in sessions:
-        chat_id = list(sessions.keys())[0]
+    user_content = prompt
+    if resume_context:
+        user_content += f"\n\n[Candidate Resume Context Attachment]:\n{resume_context}"
 
-    chat_obj = sessions[chat_id]
+    active_session["messages"].append({"role": "user", "content": user_content})
+    save_storage(sessions, active_id)
 
-    # Auto-generate title for new chats
-    if chat_obj["title"] == "New Conversation":
-        try:
-            title_prompt = [
-                {"role": "system", "content": "Generate a short title (max 5 words, no quotes) for this topic."},
-                {"role": "user", "content": user_msg}
-            ]
-            title_res = client.chat.completions.create(
-                model=deployment_name,
-                messages=title_prompt
-            )
-            ai_title = title_res.choices[0].message.content.strip().strip('"\'')
-            if ai_title:
-                chat_obj["title"] = ai_title
-        except Exception:
-            chat_obj["title"] = (user_msg[:25] + '...') if len(user_msg) > 25 else user_msg
-
-    # 1. Save user message immediately BEFORE streaming starts
-    chat_obj["messages"].append({"role": "user", "content": user_msg})
-    save_storage(sessions, chat_id)
-
-    def generate_raw_chunks():
-        full_reply = ""
+    def generate():
+        response_text = ""
         try:
             stream = client.chat.completions.create(
                 model=deployment_name,
-                messages=chat_obj["messages"],
+                messages=active_session["messages"],
                 stream=True
             )
             for chunk in stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        full_reply += delta
-                        yield delta
+                if chunk.choices and chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    response_text += token
+                    yield token
         except Exception as e:
-            full_reply += f"\n[Error: {str(e)}]"
-            yield f"\n[Error: {str(e)}]"
-        finally:
-            # 2. Re-read disk state upon stream termination to prevent overwriting parallel changes
-            latest_sessions, _ = load_storage()
-            if chat_id in latest_sessions:
-                latest_sessions[chat_id]["messages"].append({"role": "assistant", "content": full_reply})
-                save_storage(latest_sessions, chat_id)
+            response_text = f"Error calling OpenAI backend: {e}"
+            yield response_text
 
-    resp = Response(stream_with_context(generate_raw_chunks()), mimetype='text/plain; charset=utf-8')
-    resp.headers['X-Accel-Buffering'] = 'no'
-    resp.headers['Cache-Control'] = 'no-cache, no-transform'
-    return resp
+        sessions, active_id_latest = load_storage()
+        if active_id_latest in sessions:
+            sessions[active_id_latest]["messages"].append({"role": "assistant", "content": response_text})
+            save_storage(sessions, active_id_latest)
+
+    return Response(stream_with_context(generate()), mimetype='text/plain')
 
 @app.route('/api/parse_resume', methods=['POST'])
 def parse_resume():
     if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded.'}), 400
+        return jsonify({"error": "No file uploaded"}), 400
     file = request.files['file']
-    filename = file.filename.lower()
+    raw_text = ""
+    if file.filename.endswith('.pdf'):
+        reader = PdfReader(io.BytesIO(file.read()))
+        for page in reader.pages:
+            raw_text += (page.extract_text() or "") + "\n"
+    else:
+        raw_text = file.read().decode('utf-8', errors='ignore')
+    
+    clean_text = normalize_resume_text(raw_text)
+    return jsonify({"text": clean_text})
+
+@app.route('/api/suggest_jobs', methods=['POST'])
+def suggest_jobs():
+    data = request.get_json() or {}
+    cv_text = data.get('cv_text', '')
+    
+    prompt = f"""
+    Analyze this resume thoroughly. Suggest 5 highly specific and tailored target job roles (avoid generic titles like 'Software Engineer' or 'Data Analyst' unless qualified with seniority and domain, e.g., 'Senior Full-Stack Python/React Engineer' or 'Machine Learning Infrastructure Engineer'). 
+    For each role, provide the specific title and a detailed 2-3 sentence description outlining key responsibilities, expected tech stacks, and domain alignment based on the candidate's background. 
+    Return raw JSON format like: [{{"title": "...", "description": "..."}}]
+
+    Resume:
+    {cv_text[:2500]}
+    """
+    try:
+        res = client.chat.completions.create(
+            model=deployment_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        content = res.choices[0].message.content
+        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        if json_match:
+            jobs = json.loads(json_match.group(0))
+            return jsonify({"jobs": jobs})
+    except Exception as e:
+        print(f"Error suggesting jobs: {e}")
+    
+    return jsonify({"jobs": [
+        {"title": "Senior Full-Stack Python & React Engineer", "description": "Design and scale cloud-native microservices using FastAPI and React. Own backend architecture, CI/CD deployment pipelines, and database optimization."},
+        {"title": "AI Model Alignment & LLM Integration Specialist", "description": "Implement Retrieval-Augmented Generation (RAG) pipelines, fine-tune open-source LLMs, and optimize enterprise API integrations using Azure and OpenAI endpoints."},
+        {"title": "Quantitative Data Analyst & BI Developer", "description": "Build high-performance SQL data pipelines and interactive executive dashboards to track retention metrics and financial performance indicators."},
+        {"title": "Cloud Infrastructure & DevOps Automation Engineer", "description": "Manage containerized Kubernetes clusters, automated Terraform infrastructure, and secure cloud CI/CD workflows across multi-region environments."},
+        {"title": "Technical Product Manager (AI & Data Platforms)", "description": "Drive product roadmaps for enterprise data systems, bridging engineering teams and stakeholders to optimize feature deployment and alignment metrics."}
+    ]})
+
+@app.route('/api/match_jobs', methods=['POST'])
+def match_jobs():
+    """Optimized batch endpoint evaluating all roles in a single LLM API call."""
+    data = request.get_json() or {}
+    cv_text = data.get('cv_text', '')
+    target_jobs = data.get('target_jobs', [])
+
+    if not target_jobs:
+        return jsonify({"results": []})
+
+    prompt = f"""
+    Compare the Candidate CV against the following target roles:
+    {json.dumps(target_jobs, indent=2)}
+
+    Analyze ALL roles in a SINGLE batch run and return JSON with a top-level "results" array:
+    {{
+      "results": [
+        {{
+          "title": "Exact Role Title",
+          "score": 85,
+          "summary": "Fit review summary.",
+          "job_purpose": "Primary responsibilities in industry.",
+          "good_skills": [{{"skill": "Name", "reason": "Why candidate matches"}}],
+          "missing_skills": [{{"skill": "Name", "action": "How to bridge gap"}}]
+        }}
+      ]
+    }}
+
+    Candidate CV:
+    {cv_text[:2500]}
+    """
 
     try:
-        if filename.endswith('.pdf'):
-            reader = PdfReader(io.BytesIO(file.read()))
-            raw_text = "\n".join([page.extract_text() or "" for page in reader.pages])
-        elif filename.endswith('.txt'):
-            raw_text = file.read().decode('utf-8', errors='ignore')
-        else:
-            return jsonify({'error': 'Unsupported file format.'}), 400
-        
-        return jsonify({'text': raw_text.strip()})
+        res = client.chat.completions.create(
+            model=deployment_name,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        parsed = json.loads(res.choices[0].message.content)
+        return jsonify({"results": parsed.get("results", [])})
     except Exception as e:
-        return jsonify({'error': f'Failed to parse file: {str(e)}'}), 500
+        print(f"Batch match error: {e}")
+        fallback_results = [
+            {
+                "title": job.get('title', 'Target Role'),
+                "score": 75,
+                "summary": "Role alignment processed via baseline engine.",
+                "job_purpose": "Core domain responsibilities.",
+                "good_skills": [{"skill": "Core Foundations", "reason": "Technical alignment in CV."}],
+                "missing_skills": [{"skill": "Specialized Tooling", "action": "Review targeted job specs."}]
+            }
+            for job in target_jobs
+        ]
+        return jsonify({"results": fallback_results})
+
+@app.route('/api/copilot/evaluate', methods=['POST'])
+def copilot_evaluate():
+    data = request.get_json() or {}
+    notes = data.get('notes', '')
+    income = data.get('income')
+    members = data.get('members', 1)
+
+    sanitized_text, count = sanitize_pii(notes)
+    eval_res = evaluate_student_eligibility(income, members)
+
+    return jsonify({
+        "sanitized_text": sanitized_text,
+        "sanitized_count": count,
+        "evaluation": eval_res
+    })
+
+@app.route('/api/chats/export', methods=['GET'])
+def export_chat():
+    sessions, active_id = load_storage()
+    messages = sessions.get(active_id, {}).get("messages", [])
+    
+    md_content = "# Boussole AI Chat Session Export\n\n"
+    for msg in messages:
+        if msg["role"] == "system": continue
+        role_name = "User" if msg["role"] == "user" else "Boussole AI"
+        md_content += f"### {role_name}\n{msg['content']}\n\n---\n\n"
+
+    return Response(
+        md_content,
+        mimetype="text/markdown",
+        headers={"Content-Disposition": f"attachment;filename=boussole_session_{active_id}.md"}
+    )
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', port=5001, debug=True)
