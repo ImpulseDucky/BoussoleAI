@@ -1,7 +1,7 @@
 {
   "sessions": {
-    "20261006162507_539680": {
-      "id": "20261006162507_539680",
+    "chat_1791509300": {
+      "id": "chat_1791509300",
       "title": "New Conversation",
       "messages": [
         {
@@ -10,10 +10,10 @@
         },
         {
           "role": "assistant",
-          "content": "Welcome to Boussole AI Career Strategist. How can I help you navigate your professional trajectory today?"
+          "content": "Welcome to BoussoleAI Career Strategist. How can I help you navigate your professional trajectory today?"
         }
       ]
     }
   },
-  "active_id": "20261006162507_539680"
+  "active_id": "chat_1791509300"
 }
