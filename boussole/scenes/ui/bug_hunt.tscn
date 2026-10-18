@@ -1,0 +1,162 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/bug_hunt.gd" id="1_bh"]
+[ext_resource type="FontFile" path="res://fonts/ArialUnicode.ttf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="style_window"]
+bg_color = Color(0.10, 0.10, 0.12, 1.0)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.35, 0.40, 0.50, 1.0)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="BugHunt" type="CanvasLayer"]
+layer = 15
+script = ExtResource("1_bh")
+
+[node name="BG" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.65)
+
+[node name="Window" type="Panel" parent="."]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -400.0
+offset_top = -300.0
+offset_right = 400.0
+offset_bottom = 300.0
+theme_override_styles/panel = SubResource("style_window")
+
+[node name="TitleBar" type="Panel" parent="Window"]
+anchor_right = 1.0
+offset_bottom = 36.0
+offset_top = 4.0
+offset_left = 4.0
+offset_right = -4.0
+
+[node name="TitleLabel" type="Label" parent="Window/TitleBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 4.0
+offset_right = -12.0
+offset_bottom = -4.0
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.6, 0.75, 0.95, 1)
+text = "Bug Hunt Challenge"
+
+[node name="CodePanel" type="Panel" parent="Window"]
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 48.0
+offset_right = -12.0
+offset_bottom = 200.0
+
+[node name="LineNumbers" type="Label" parent="Window/CodePanel"]
+anchor_top = 0.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 6.0
+offset_right = 36.0
+offset_bottom = -6.0
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.4, 0.4, 0.45, 1)
+horizontal_alignment = 2
+vertical_alignment = 0
+text = "1\n2\n3\n4\n5\n6\n7"
+
+[node name="CodeText" type="RichTextLabel" parent="Window/CodePanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 42.0
+offset_top = 6.0
+offset_right = -8.0
+offset_bottom = -6.0
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/normal_font_size = 14
+theme_override_colors/default_color = Color(0.78, 0.80, 0.85, 1)
+bbcode_enabled = true
+text = "code here"
+fit_content = false
+scroll_active = true
+
+[node name="QuestionLabel" type="Label" parent="Window"]
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = 208.0
+offset_right = -16.0
+offset_bottom = 234.0
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+text = "Which line has the bug?"
+
+[node name="AnswerContainer" type="VBoxContainer" parent="Window"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 242.0
+offset_right = -16.0
+offset_bottom = -12.0
+theme_override_constants/separation = 6
+
+[node name="ResultPanel" type="Panel" parent="Window"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 208.0
+offset_right = -12.0
+offset_bottom = -12.0
+
+[node name="VBox" type="VBoxContainer" parent="Window/ResultPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 12.0
+offset_right = -16.0
+offset_bottom = -12.0
+theme_override_constants/separation = 12
+
+[node name="ResultTitle" type="Label" parent="Window/ResultPanel/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.3, 0.9, 0.4, 1)
+text = "Correct!"
+horizontal_alignment = 1
+
+[node name="ResultText" type="Label" parent="Window/ResultPanel/VBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.85, 0.88, 0.92, 1)
+autowrap_mode = 3
+horizontal_alignment = 1
+text = "Result text here"
+
+[node name="XPLabel" type="Label" parent="Window/ResultPanel/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
+horizontal_alignment = 1
+text = "+50 Technical XP"
+
+[node name="ContinueBtn" type="Button" parent="Window/ResultPanel/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+text = "Continue"

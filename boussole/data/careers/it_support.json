@@ -1,0 +1,16 @@
+{
+    "name": "IT Support Specialist",
+    "sections": {
+        "daily_work": "Help people with computer problems. Set up hardware and software. Troubleshoot network issues. Create documentation. Manage user accounts and security.",
+        "learning": "Operating systems (Windows, macOS, Linux), networking basics, hardware troubleshooting, customer service skills, security fundamentals (CompTIA A+, Network+).",
+        "pay": "Entry-level typically starts around $35,000-$55,000 USD. Mid-level $50,000-$75,000. Senior or specialized roles can reach $80,000+. Verify for your region.",
+        "entry_routes": "Google IT Support Professional Certificate (Coursera), CompTIA A+ certification, associate degree in IT, help desk experience, self-study via free online resources."
+    },
+    "try_in_real_life": [
+        "Set up a virtual machine (try VirtualBox with a free Linux distro)",
+        "Help a friend or family member with a tech problem and document the steps",
+        "Take the free Google IT Support course on Coursera",
+        "Research CompTIA A+ certification requirements"
+    ],
+    "sources": "U.S. Bureau of Labor Statistics Occupational Outlook Handbook (bls.gov/ooh); CompTIA industry reports"
+}

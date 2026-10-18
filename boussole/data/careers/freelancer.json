@@ -1,0 +1,16 @@
+{
+    "name": "Freelancer",
+    "sections": {
+        "daily_work": "Manage your own business: find clients, deliver work, handle invoicing. Specialize in writing, design, coding, or consulting. Balance multiple projects. Market yourself continuously.",
+        "learning": "Self-management, time tracking and billing, contract negotiation, client communication, taxes and business registration, portfolio building, marketing and sales, project scoping.",
+        "pay": "Varies widely by skill and niche. Entry freelancers earn $15-$30/hour USD. Experienced freelancers $40-$100+/hour. Specialized consultants can earn $100-$200+/hour. Verify for your region.",
+        "entry_routes": "Build a portfolio on freelance platforms (Upwork, Fiverr), start side projects while employed, network in professional communities, cold outreach to potential clients."
+    },
+    "try_in_real_life": [
+        "Create a profile on Upwork or Fiverr for a skill you have",
+        "Complete one small freelance project for a friend or local business",
+        "Track your time on a normal day using Toggl or Clockify",
+        "Research self-employment tax basics for your country"
+    ],
+    "sources": "Upwork Freelance Forward reports; Freelancers Union surveys"
+}

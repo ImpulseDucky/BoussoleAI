@@ -1,0 +1,57 @@
+[gd_scene load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://scripts/interiors/community_center.gd" id="1_cc"]
+[ext_resource type="Script" path="res://scripts/player_controller.gd" id="2_player"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="3_hud"]
+[ext_resource type="PackedScene" path="res://scenes/ui/dialogue.tscn" id="4_dlg"]
+[ext_resource type="PackedScene" path="res://scenes/ui/journal.tscn" id="5_jrn"]
+[ext_resource type="PackedScene" path="res://scenes/ui/career_compass.tscn" id="6_cc"]
+[ext_resource type="PackedScene" path="res://scenes/ui/pause_menu.tscn" id="7_pm"]
+[ext_resource type="PackedScene" path="res://scenes/ui/quest_map.tscn" id="9_qm"]
+[ext_resource type="PackedScene" path="res://scenes/ui/career_tracker.tscn" id="10_ct"]
+[ext_resource type="PackedScene" path="res://scenes/ui/profile.tscn" id="11_prof"]
+[ext_resource type="TileSet" path="res://assets/tileset.tres" id="8_ts"]
+[ext_resource type="PackedScene" path="res://scenes/ui/achievement_screen.tscn" id="12_as"]
+[ext_resource type="PackedScene" path="res://scenes/ui/shop.tscn" id="13_shop"]
+[ext_resource type="PackedScene" path="res://scenes/ui/settings.tscn" id="14_settings"]
+
+[sub_resource type="CircleShape2D" id="shape_player"]
+radius = 10.0
+
+[sub_resource type="CircleShape2D" id="shape_interact"]
+radius = 28.0
+
+[node name="CommunityCenter" type="Node2D"]
+script = ExtResource("1_cc")
+
+[node name="TileMapLayer" type="TileMapLayer" parent="."]
+tile_set = ExtResource("8_ts")
+
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(384, 528)
+script = ExtResource("2_player")
+
+[node name="Collision" type="CollisionShape2D" parent="Player"]
+shape = SubResource("shape_player")
+
+[node name="Camera2D" type="Camera2D" parent="Player"]
+zoom = Vector2(1.2, 1.2)
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+
+[node name="InteractionArea" type="Area2D" parent="Player"]
+
+[node name="Shape" type="CollisionShape2D" parent="Player/InteractionArea"]
+shape = SubResource("shape_interact")
+
+[node name="HUD" parent="." instance=ExtResource("3_hud")]
+[node name="Dialogue" parent="." instance=ExtResource("4_dlg")]
+[node name="Journal" parent="." instance=ExtResource("5_jrn")]
+[node name="CareerCompass" parent="." instance=ExtResource("6_cc")]
+[node name="PauseMenu" parent="." instance=ExtResource("7_pm")]
+[node name="QuestMap" parent="." instance=ExtResource("9_qm")]
+[node name="CareerTracker" parent="." instance=ExtResource("10_ct")]
+[node name="Profile" parent="." instance=ExtResource("11_prof")]
+[node name="AchievementScreen" parent="." instance=ExtResource("12_as")]
+[node name="Shop" parent="." instance=ExtResource("13_shop")]
+[node name="Settings" parent="." instance=ExtResource("14_settings")]

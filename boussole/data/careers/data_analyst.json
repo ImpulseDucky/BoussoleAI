@@ -1,0 +1,16 @@
+{
+    "name": "Data Analyst",
+    "sections": {
+        "daily_work": "Collect, clean, and analyze data to find trends and patterns. Create dashboards and reports. Write SQL queries. Present findings to stakeholders.",
+        "learning": "Excel/Google Sheets, SQL, Python or R, data visualization tools (Tableau, Power BI), statistics basics, storytelling with data.",
+        "pay": "Entry-level typically starts around $50,000-$75,000 USD. Mid-level $75,000-$110,000. Senior data analysts can earn $100,000-$130,000+. Verify for your region.",
+        "entry_routes": "Self-learning via online courses (Google Data Analytics Certificate, Coursera), statistics or math degree, bootcamps, building a portfolio of analysis projects on Kaggle."
+    },
+    "try_in_real_life": [
+        "Take a free SQL tutorial (try SQLBolt or Mode Analytics)",
+        "Analyze a public dataset on Kaggle or Google Dataset Search",
+        "Create a chart or dashboard in Google Sheets or Tableau Public",
+        "Follow data analysts on LinkedIn and read their case studies"
+    ],
+    "sources": "U.S. Bureau of Labor Statistics Occupational Outlook Handbook (bls.gov/ooh); data industry salary surveys"
+}

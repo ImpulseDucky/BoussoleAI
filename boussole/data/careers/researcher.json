@@ -1,0 +1,16 @@
+{
+    "name": "Researcher",
+    "sections": {
+        "daily_work": "Design and conduct studies, experiments, or surveys. Analyze data and write reports. Review literature. Present findings. Apply for grants and funding.",
+        "learning": "Research methodology, statistics, academic writing, literature review, data analysis tools (SPSS, R, Python), domain expertise in your field of study.",
+        "pay": "Research assistants start around $35,000-$50,000 USD. Full researchers with advanced degrees earn $60,000-$120,000+. University professors vary widely. Verify for your region.",
+        "entry_routes": "Bachelor's degree in a field of interest, research assistant positions, graduate school (master's or PhD), publishing papers, networking at academic conferences."
+    },
+    "try_in_real_life": [
+        "Read a research paper on a topic you love (try Google Scholar)",
+        "Design a simple survey using Google Forms and analyze results",
+        "Find a professor or lab doing interesting work and ask about volunteering",
+        "Write a short literature review on a topic that fascinates you"
+    ],
+    "sources": "National Science Foundation surveys; academic career outlook reports"
+}

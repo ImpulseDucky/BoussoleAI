@@ -1,0 +1,83 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/career_compass.gd" id="1_cc"]
+[ext_resource type="FontFile" path="res://fonts/ArialUnicode.ttf" id="2_font"]
+
+[node name="CareerCompass" type="CanvasLayer"]
+layer = 30
+script = ExtResource("1_cc")
+
+[node name="Panel" type="Panel" parent="."]
+anchor_left = 0.1
+anchor_top = 0.06
+anchor_right = 0.9
+anchor_bottom = 0.94
+
+[node name="TitleLabel" type="Label" parent="Panel"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_left = 0.0
+offset_top = 8.0
+offset_right = 0.0
+offset_bottom = 36.0
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+text = "Career Compass"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="Panel"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 44.0
+offset_right = -16.0
+offset_bottom = -16.0
+
+[node name="Content" type="RichTextLabel" parent="Panel/Scroll"]
+custom_minimum_size = Vector2(600, 500)
+size_flags_horizontal = 3
+theme_override_fonts/normal_font = ExtResource("2_font")
+theme_override_font_sizes/normal_font_size = 16
+bbcode_enabled = true
+text = "Career info..."
+fit_content = true
+
+[node name="ListVBox" type="VBoxContainer" parent="Panel/Scroll"]
+visible = false
+custom_minimum_size = Vector2(600, 0)
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="BackBtn" type="Button" parent="Panel"]
+visible = false
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 16.0
+offset_top = 8.0
+offset_right = 120.0
+offset_bottom = 36.0
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 14
+text = "Back to list"
+
+[node name="HintLabel" type="Label" parent="Panel"]
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = -24.0
+offset_right = 0.0
+offset_bottom = -4.0
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.5, 0.5, 0.55, 1)
+text = "Press ESC or E to close"
+horizontal_alignment = 1

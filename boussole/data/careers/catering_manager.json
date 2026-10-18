@@ -1,0 +1,16 @@
+{
+    "name": "Catering Manager",
+    "sections": {
+        "daily_work": "Plan and coordinate catered events. Manage budgets, menus, and staff. Work with clients to customize events. Ensure food safety and quality. Oversee setup and teardown.",
+        "learning": "Event planning, food and beverage management, budgeting, staff scheduling, food safety certification (ServSafe), customer relations, logistics coordination.",
+        "pay": "Entry-level typically starts around $35,000-$50,000 USD. Mid-level $50,000-$75,000. Senior managers at large companies can earn $80,000+. Verify for your region.",
+        "entry_routes": "Hospitality or culinary degree, food service experience, ServSafe certification, event planning internships, starting as a catering server or assistant."
+    },
+    "try_in_real_life": [
+        "Volunteer to help organize a community or school event",
+        "Create a mock catering plan: menu, budget, and timeline for 50 people",
+        "Research ServSafe food safety certification",
+        "Talk to someone who works in event catering about their experience"
+    ],
+    "sources": "Catersource industry surveys; BLS food service management data"
+}

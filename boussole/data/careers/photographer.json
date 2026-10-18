@@ -1,0 +1,16 @@
+{
+    "name": "Photographer",
+    "sections": {
+        "daily_work": "Capture and edit images for portraits, events, products, journalism, or fine art. Work with lighting, composition, and post-processing to tell visual stories.",
+        "learning": "Camera operation, lighting techniques, composition rules, photo editing software (Lightroom, Photoshop), business and marketing skills for freelance work.",
+        "pay": "Highly variable depending on specialty and freelance vs. employed status. Entry-level studio assistants may earn $25,000-$40,000 USD. Freelance rates vary widely. Always verify current data for your region.",
+        "entry_routes": "Photography degree or self-taught, building a portfolio, assisting established photographers, specializing in a niche (wedding, product, editorial)."
+    },
+    "try_in_real_life": [
+        "Take a series of photos telling a story about your neighborhood",
+        "Learn basic photo editing with free software like GIMP or Snapseed",
+        "Practice different lighting setups using natural light",
+        "Research local photographers and ask about their workflow"
+    ],
+    "sources": "U.S. Bureau of Labor Statistics Occupational Outlook Handbook (bls.gov/ooh)"
+}

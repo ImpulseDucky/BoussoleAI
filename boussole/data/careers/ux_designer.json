@@ -1,0 +1,16 @@
+{
+    "name": "UI/UX Designer",
+    "sections": {
+        "daily_work": "Research user needs, sketch wireframes, create prototypes in Figma. Test designs with real users. Collaborate with developers to implement designs.",
+        "learning": "Design principles (color, typography, layout), Figma or Adobe XD, user research methods, prototyping, accessibility, basic HTML/CSS helps.",
+        "pay": "Entry-level typically starts around $45,000-$70,000 USD. Mid-level $70,000-$110,000. Senior designers can earn $120,000+. Verify for your region.",
+        "entry_routes": "Self-learning via Google UX Design Certificate (Coursera), design bootcamps, portfolio of design projects, fine arts or interaction design degree, networking in design communities."
+    },
+    "try_in_real_life": [
+        "Complete the free Google UX Design course on Coursera",
+        "Redesign an app or website you use daily (before/after)",
+        "Create a free Figma account and prototype a simple app",
+        "Conduct a mini user interview: ask 3 friends about an app they love"
+    ],
+    "sources": "UX Design salary surveys (NN/g, UX Design Institute); creative industry reports"
+}

@@ -1,0 +1,16 @@
+{
+    "name": "Technical Writer",
+    "sections": {
+        "daily_work": "Write documentation, user guides, and API references. Simplify complex technical concepts. Work with engineers to understand products. Edit and maintain help centers.",
+        "learning": "Writing and editing skills, understanding of software/technology, Markdown and documentation tools (GitBook, Confluence), basic coding literacy, user testing.",
+        "pay": "Entry-level typically starts around $45,000-$65,000 USD. Mid-level $65,000-$95,000. Senior technical writers can earn $100,000+. Verify for your region.",
+        "entry_routes": "English or communications degree, technical writing certificate, writing samples and portfolio, contributing to open-source documentation, tech-adjacent roles (QA, support) as a stepping stone."
+    },
+    "try_in_real_life": [
+        "Write a how-to guide for a tech task you know well",
+        "Contribute documentation to an open-source project on GitHub",
+        "Review a software product's help docs and note what's confusing",
+        "Research the Society for Technical Communication (STC)"
+    ],
+    "sources": "Society for Technical Communication salary surveys; BLS Occupational Outlook Handbook"
+}

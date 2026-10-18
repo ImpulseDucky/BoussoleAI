@@ -1,0 +1,16 @@
+{
+    "name": "Chef",
+    "sections": {
+        "daily_work": "Design and cook dishes. Manage kitchen staff and operations. Source ingredients. Maintain food safety standards. Create menus. Handle high-pressure service periods.",
+        "learning": "Cooking techniques, knife skills, flavor pairing, menu design, kitchen management, food safety (ServSafe), inventory and cost control, plating and presentation.",
+        "pay": "Line cooks start around $12-$18/hour USD. Sous chefs $40,000-$60,000. Executive chefs at restaurants can earn $60,000-$100,000+. Celebrity chefs earn more. Verify for your region.",
+        "entry_routes": "Culinary school or apprenticeship, starting as a prep cook, working up through kitchen ranks (line cook, sous chef, chef de cuisine), self-taught with mentorship."
+    },
+    "try_in_real_life": [
+        "Cook a new recipe from scratch every week for a month",
+        "Practice knife skills with basic cuts (julienne, dice, chiffonade)",
+        "Stage (intern) at a restaurant kitchen for a day",
+        "Research culinary schools and their program offerings"
+    ],
+    "sources": "American Culinary Federation surveys; BLS chefs and head cooks data"
+}

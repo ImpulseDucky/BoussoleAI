@@ -1,0 +1,16 @@
+{
+    "name": "Web Developer",
+    "sections": {
+        "daily_work": "Build and maintain websites and web apps. Write HTML, CSS, and JavaScript. Collaborate with designers and back-end developers. Debug cross-browser issues.",
+        "learning": "HTML, CSS, JavaScript, responsive design, front-end frameworks (React, Vue), basic back-end (Node.js), version control (Git), accessibility standards.",
+        "pay": "Entry-level typically starts around $45,000-$70,000 USD. Mid-level $70,000-$110,000. Senior roles can exceed $130,000. Verify current data for your region.",
+        "entry_routes": "Self-learning via freeCodeCamp or The Odin Project, web development bootcamps, computer science degree, portfolio of personal projects, freelance gigs to build experience."
+    },
+    "try_in_real_life": [
+        "Complete a free HTML/CSS course (try freeCodeCamp)",
+        "Build a personal website or blog from scratch",
+        "Inspect the source code of websites you admire (right-click > Inspect)",
+        "Research junior web developer job postings in your area"
+    ],
+    "sources": "U.S. Bureau of Labor Statistics Occupational Outlook Handbook (bls.gov/ooh); web developer industry surveys"
+}

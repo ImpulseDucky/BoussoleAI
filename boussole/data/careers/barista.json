@@ -1,0 +1,16 @@
+{
+    "name": "Barista",
+    "sections": {
+        "daily_work": "Prepare coffee and espresso drinks. Operate espresso machines and grinders. Serve customers, take orders, handle payments. Maintain a clean workspace. Recommend drinks.",
+        "learning": "Coffee knowledge (beans, roasts, brewing methods), espresso extraction, latte art, milk steaming, customer service, food safety, point-of-sale systems.",
+        "pay": "Entry-level typically starts around $12-$18/hour USD plus tips. Experienced baristas at specialty shops can earn $15-$25/hour plus tips. Managers earn more. Verify for your region.",
+        "entry_routes": "Apply at local coffee shops, SCA (Specialty Coffee Association) certification courses, barista training programs, starting as a counter person and training up."
+    },
+    "try_in_real_life": [
+        "Visit different coffee shops and observe their workflow",
+        "Try brewing coffee at home with different methods (pour-over, French press)",
+        "Ask a barista about their favorite part of the job",
+        "Research SCA coffee skills certification"
+    ],
+    "sources": "Specialty Coffee Association industry reports; BLS food service data"
+}

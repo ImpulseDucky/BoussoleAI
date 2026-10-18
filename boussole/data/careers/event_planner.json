@@ -1,0 +1,16 @@
+{
+    "name": "Event Planner",
+    "sections": {
+        "daily_work": "Plan and coordinate events from concept to execution. Manage budgets, vendors, and timelines. Handle logistics like venue, catering, and AV. Solve on-site problems.",
+        "learning": "Project management, budgeting, vendor negotiation, contract management, event design, logistics planning, marketing and promotion, crisis management.",
+        "pay": "Entry-level typically starts around $35,000-$50,000 USD. Mid-level $50,000-$75,000. Senior planners and directors can earn $80,000-$120,000. Verify for your region.",
+        "entry_routes": "Hospitality or communications degree, event planning certificate (CMP, CSEP), volunteering at events, internship at an event agency, starting as an event assistant."
+    },
+    "try_in_real_life": [
+        "Plan a detailed event: birthday party, fundraiser, or club meeting",
+        "Create a timeline, budget, and checklist for a real event",
+        "Volunteer at a conference or festival to see backstage logistics",
+        "Research the Certified Meeting Professional (CMP) credential"
+    ],
+    "sources": "Events Industry Council salary surveys; BLS meeting and event planners data"
+}

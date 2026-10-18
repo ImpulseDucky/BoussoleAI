@@ -1,0 +1,49 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/journal.gd" id="1_jrn"]
+[ext_resource type="FontFile" path="res://fonts/ArialUnicode.ttf" id="2_font"]
+
+[node name="Journal" type="CanvasLayer"]
+layer = 30
+script = ExtResource("1_jrn")
+
+[node name="Panel" type="Panel" parent="."]
+anchor_left = 0.1
+anchor_top = 0.1
+anchor_right = 0.9
+anchor_bottom = 0.9
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+
+[node name="Scroll" type="ScrollContainer" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Scroll"]
+custom_minimum_size = Vector2(600, 400)
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="QuestLabel" type="RichTextLabel" parent="Panel/Scroll/VBox"]
+custom_minimum_size = Vector2(600, 200)
+layout_mode = 2
+theme_override_fonts/normal_font = ExtResource("2_font")
+theme_override_font_sizes/normal_font_size = 18
+bbcode_enabled = true
+text = "Quest info..."
+fit_content = true
+
+[node name="SkillsLabel" type="RichTextLabel" parent="Panel/Scroll/VBox"]
+custom_minimum_size = Vector2(600, 200)
+layout_mode = 2
+theme_override_fonts/normal_font = ExtResource("2_font")
+theme_override_font_sizes/normal_font_size = 18
+bbcode_enabled = true
+text = "Skills..."
+fit_content = true

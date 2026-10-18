@@ -1,0 +1,16 @@
+{
+    "name": "Librarian",
+    "sections": {
+        "daily_work": "Help patrons find information and resources. Manage collections and cataloging. Run community programs. Teach information literacy. Preserve archives.",
+        "learning": "Library science (MLIS degree), information organization, cataloging systems, digital resource management, community programming, research skills.",
+        "pay": "Entry-level typically starts around $40,000-$55,000 USD. With MLIS degree: $50,000-$80,000. Directors can earn $90,000+. Verify for your region.",
+        "entry_routes": "Volunteer at a local library, bachelor's degree in any field, Master of Library and Information Science (MLIS), library assistant positions, specializing in archives or digital libraries."
+    },
+    "try_in_real_life": [
+        "Volunteer at your school or local library",
+        "Explore the Dewey Decimal or Library of Congress classification system",
+        "Ask a librarian about their career path and daily work",
+        "Research MLIS programs and their admission requirements"
+    ],
+    "sources": "American Library Association salary surveys; U.S. Bureau of Labor Statistics"
+}

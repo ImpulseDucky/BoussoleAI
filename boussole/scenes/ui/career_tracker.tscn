@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/career_tracker.gd" id="1_ct"]
+
+[node name="CareerTracker" type="CanvasLayer"]
+layer = 33
+script = ExtResource("1_ct")

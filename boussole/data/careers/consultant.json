@@ -1,0 +1,16 @@
+{
+    "name": "Consultant",
+    "sections": {
+        "daily_work": "Analyze client problems and recommend solutions. Conduct research and interviews. Build models and frameworks. Present findings to stakeholders. Manage project timelines.",
+        "learning": "Analytical thinking, structured problem-solving (MECE, issue trees), data analysis, presentation skills, business strategy, financial modeling, stakeholder management.",
+        "pay": "Entry-level at major firms typically starts around $70,000-$90,000 USD. Mid-level $100,000-$150,000. Partners can earn $300,000+. Independent consultants vary widely. Verify for your region.",
+        "entry_routes": "Business or analytical degree, case interview preparation, internships at consulting firms, networking, specialized industry expertise, MBA for senior roles."
+    },
+    "try_in_real_life": [
+        "Practice case interviews (try free cases on McKinsey or BCG websites)",
+        "Analyze a local business problem and write a 1-page recommendation",
+        "Read 'Case in Point' or watch consulting case interview videos",
+        "Research management consulting firms and their recruiting timelines"
+    ],
+    "sources": "Management Consulted salary reports; Vault consulting industry guides"
+}

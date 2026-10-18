@@ -1,0 +1,16 @@
+{
+    "name": "Software Developer",
+    "sections": {
+        "daily_work": "Build, test, debug, collaborate. Write code that powers apps, websites, and systems.",
+        "learning": "Programming languages (Python, JavaScript, etc.), frameworks, version control, problem-solving fundamentals.",
+        "pay": "Varies by location and experience. Entry-level often starts around $50,000-$80,000 USD. Always verify current data for your region.",
+        "entry_routes": "Computer science degree, self-learning with online resources, coding bootcamps, internships, open-source contributions."
+    },
+    "try_in_real_life": [
+        "Complete a beginner programming exercise (try freeCodeCamp or Codecademy)",
+        "Build and share a small project on GitHub",
+        "Talk to a developer about their day-to-day work",
+        "Research entry-level job postings in your region"
+    ],
+    "sources": "U.S. Bureau of Labor Statistics Occupational Outlook Handbook (bls.gov/ooh)"
+}

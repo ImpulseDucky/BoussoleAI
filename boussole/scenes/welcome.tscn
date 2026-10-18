@@ -1,0 +1,71 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/welcome.gd" id="1_welcome"]
+[ext_resource type="FontFile" path="res://fonts/ArialUnicode.ttf" id="2_font"]
+
+[node name="Welcome" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_welcome")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 200.0
+offset_top = 80.0
+offset_right = -200.0
+offset_bottom = -80.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+theme_override_constants/separation = 30
+
+[node name="Title" type="Label" parent="VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 96
+theme_override_colors/font_color = Color(0.25, 0.55, 0.75, 1)
+text = "Boussole"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.55, 0.58, 0.62, 1)
+text = "A Life Simulation"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
+
+[node name="StartButton" type="Button" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(400, 70)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 26
+text = "Start New Game"
+size_flags_horizontal = 4
+
+[node name="ContinueButton" type="Button" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(400, 70)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 26
+text = "Continue"
+size_flags_horizontal = 4
+
+[node name="HintLabel" type="Label" parent="VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.45, 0.48, 0.52, 1)
+text = "WASD/Arrows to move | E to interact | J for journal | M for map | C for careers | P for profile | ESC for menu"
+horizontal_alignment = 1
