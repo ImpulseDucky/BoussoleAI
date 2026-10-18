@@ -771,8 +771,8 @@ UNIFIED_HTML_TEMPLATE = r"""
         <div id="view-godotgame" class="hidden flex-1 relative bg-slate-900/60 dark:bg-slate-950/80 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden flex flex-col h-[calc(100vh-6.5rem)] min-h-0">
             <div class="p-4 bg-white/90 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
                 <div>
-                    <h2 class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="godot_view_title">Godot Web Game Sandbox</h2>
-                    <p class="text-xs text-slate-500 dark:text-slate-400" data-i18n="godot_view_subtitle">Play and test your exported Godot web build directly inside the platform.</p>
+                    <h2 class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="godot_view_title">Boussole Game</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400" data-i18n="godot_view_subtitle">Boussole Game</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="reloadGodotGame()" class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 rounded-lg transition shadow-sm" data-i18n="godot_reload_btn">Reload Game</button>
@@ -810,7 +810,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 btn_copilot: "Financial Aid",
                 btn_bridge: "Grant-to-Career",
                 btn_constellation: "Skill Constellation",
-                btn_godotgame: "Godot Game",
+                btn_godotgame: "Boussole Game",
                 chat_history_title: "Conversations",
                 new_chat_btn: "+ New",
                 upload_resume_title: "Resume Context",
@@ -827,8 +827,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_placeholder: "Ask a question or select an action template...",
                 send_btn: "Send",
                 tip_enter: "Press Enter to send, Shift + Enter for line break.",
-                godot_view_title: "Godot Web Game Sandbox",
-                godot_view_subtitle: "Play and test your exported Godot web build directly inside the platform.",
+                godot_view_title: "Boussole Game",
+                godot_view_subtitle: "Play, try different careers and navigate through life!",
                 godot_reload_btn: "Reload Game",
                 godot_fs_btn: "Fullscreen"
             },
@@ -838,7 +838,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 btn_copilot: "學生資助",
                 btn_bridge: "資助與就業橋樑",
                 btn_constellation: "技能星座圖",
-                btn_godotgame: "Godot 遊戲",
+                btn_godotgame: "Boussole 遊戲",
                 chat_history_title: "對話歷史",
                 new_chat_btn: "+ 新建",
                 upload_resume_title: "履歷內容",
@@ -855,8 +855,8 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_placeholder: "請輸入問題或選擇快捷模組...",
                 send_btn: "發送",
                 tip_enter: "按 Enter 發送，Shift + Enter 換行。",
-                godot_view_title: "Godot 網頁遊戲沙盒",
-                godot_view_subtitle: "直接在平台內遊玩與測試您導出的 Godot 網頁版本。",
+                godot_view_title: "Boussole 遊戲",
+                godot_view_subtitle: "遊玩、嘗試不同的職涯並導航人生！",
                 godot_reload_btn: "重新載入遊戲",
                 godot_fs_btn: "全螢幕"
             },
@@ -866,7 +866,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 btn_copilot: "学生资助",
                 btn_bridge: "资助与就业桥梁",
                 btn_constellation: "技能星座图",
-                btn_godotgame: "Godot 游戏",
+                btn_godotgame: "Boussole 游戏",
                 chat_history_title: "对话历史",
                 new_chat_btn: "+ 新建",
                 upload_resume_title: "简历内容",
@@ -883,13 +883,12 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_placeholder: "请输入问题或选择快捷模块...",
                 send_btn: "发送",
                 tip_enter: "按 Enter 发送，Shift + Enter 换行。",
-                godot_view_title: "Godot 网页游戏沙盒",
-                godot_view_subtitle: "直接在平台内游玩与测试您导出的 Godot 网页版本。",
+                godot_view_title: "Boussole 游戏",
+                godot_view_subtitle: "游玩、尝试不同的职业并导航人生！",
                 godot_reload_btn: "重新加载游戏",
                 godot_fs_btn: "全屏幕"
             }
         };
-
         let currentLang = 'en';
 
         function toggleTheme() {
