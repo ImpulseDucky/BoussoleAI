@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, Response, stream_with_context
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, Response, stream_with_context, send_from_directory
 from openai import OpenAI
 from pypdf import PdfReader
 
@@ -29,8 +29,29 @@ client = OpenAI(
     api_key=api_key
 )
 
+# SINGLE app initialization here:
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'boussole-ai-super-secret-key-2026')
+
+# Define an absolute path to your game folder next to app.py
+GAME_FOLDER = Path(__file__).resolve().parent / 'boussole'
+
+@app.route('/boussole')
+@app.route('/boussole/')
+def serve_godot_game():
+    response = send_from_directory(GAME_FOLDER, 'index.html')
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+    response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+    return response
+
+@app.route('/boussole/<path:filename>')
+def serve_godot_assets(filename):
+    response = send_from_directory(GAME_FOLDER, filename)
+    if filename.endswith('.wasm'):
+        response.headers['Content-Type'] = 'application/wasm'
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+    response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+    return response
 
 # ==============================================================================
 # SERVER-SIDE JSON FILE CHAT STORAGE
@@ -317,9 +338,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                     <option value="copilot" data-i18n="btn_copilot">Financial Aid</option>
                     <option value="bridge" data-i18n="btn_bridge">Grant-to-Career</option>
                     <option value="constellation" data-i18n="btn_constellation">Skill Constellation</option>
+                    <option value="godotgame" data-i18n="btn_godotgame">Godot Game</option>
                 </select>
 
-                <!-- Desktop Navigation Pills (5 Views) -->
+                <!-- Desktop Navigation Pills (6 Views) -->
                 <div class="hidden md:flex items-center bg-slate-200/50 dark:bg-slate-800/60 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 gap-1 backdrop-blur-sm">
                     <button onclick="switchView('career')" id="btn-career" data-i18n="btn_career" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm transition">
                         Career Coach
@@ -335,6 +357,9 @@ UNIFIED_HTML_TEMPLATE = r"""
                     </button>
                     <button onclick="switchView('constellation')" id="btn-constellation" data-i18n="btn_constellation" class="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
                         Skill Constellation
+                    </button>
+                    <button onclick="switchView('godotgame')" id="btn-godotgame" data-i18n="btn_godotgame" class="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+                        Godot Game
                     </button>
                 </div>
 
@@ -363,7 +388,7 @@ UNIFIED_HTML_TEMPLATE = r"""
         <div id="view-career" class="flex-1 flex flex-col md:flex-row gap-4 h-[calc(100vh-6.5rem)] min-h-0">
             <aside class="w-full md:w-72 flex flex-col gap-3 flex-shrink-0 h-full overflow-hidden">
                 
-                <!-- Chat History Panel (Flexible height container with internal scroll, never compresses individual boxes) -->
+                <!-- Chat History Panel -->
                 <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 shadow-sm flex flex-col flex-1 min-h-[160px] max-h-[240px] flex-shrink-0">
                     <div class="flex items-center justify-between pb-2 flex-shrink-0">
                         <h2 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" data-i18n="chat_history_title">Conversations</h2>
@@ -691,7 +716,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                         </button>
                     </div>
 
-                    <!-- Constellation History Log (Fixed height container with internal scroll, never reduces) -->
+                    <!-- Constellation History Log -->
                     <div class="flex flex-col bg-slate-50/80 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 h-[220px] flex-shrink-0">
                         <div class="flex justify-between items-center pb-2 flex-shrink-0">
                             <h3 class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Galaxy History Log</h3>
@@ -742,6 +767,25 @@ UNIFIED_HTML_TEMPLATE = r"""
             </div>
         </div>
 
+        <!-- VIEW 6: GODOT GAME SANDBOX -->
+        <div id="view-godotgame" class="hidden flex-1 relative bg-slate-900/60 dark:bg-slate-950/80 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden flex flex-col h-[calc(100vh-6.5rem)] min-h-0">
+            <div class="p-4 bg-white/90 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+                <div>
+                    <h2 class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="godot_view_title">Godot Web Game Sandbox</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400" data-i18n="godot_view_subtitle">Play and test your exported Godot web build directly inside the platform.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="reloadGodotGame()" class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 rounded-lg transition shadow-sm" data-i18n="godot_reload_btn">Reload Game</button>
+                    <button onclick="toggleGodotFullscreen()" class="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-xs font-medium text-white rounded-lg transition shadow-sm" data-i18n="godot_fs_btn">Fullscreen</button>
+                </div>
+            </div>
+            
+            <div id="godot-container" class="flex-1 relative bg-black flex items-center justify-center overflow-hidden p-4">
+                <div class="relative w-full max-w-[1280px] aspect-[16/9] max-h-full shadow-2xl rounded-xl overflow-hidden bg-black">
+                    <iframe id="godot-iframe" src="/boussole/" class="w-full h-full border-0 absolute inset-0" allow="autoplay; fullscreen; pointer-lock" sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-downloads"></iframe>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Frontend Script Logic -->
@@ -766,6 +810,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 btn_copilot: "Financial Aid",
                 btn_bridge: "Grant-to-Career",
                 btn_constellation: "Skill Constellation",
+                btn_godotgame: "Godot Game",
                 chat_history_title: "Conversations",
                 new_chat_btn: "+ New",
                 upload_resume_title: "Resume Context",
@@ -782,70 +827,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_placeholder: "Ask a question or select an action template...",
                 send_btn: "Send",
                 tip_enter: "Press Enter to send, Shift + Enter for line break.",
-                
-                job_view_title: "Role Compatibility & Match Analysis",
-                job_view_subtitle: "Evaluate target positions against your resume profile.",
-                job_col1_title: "1. Resume & Target Positions",
-                job_upload_label: "Upload CV Document:",
-                job_upload_status: "Attach Resume (PDF/TXT)",
-                job_paste_label: "Or Resume Text:",
-                job_recommend_btn: "Suggest Target Roles from CV",
-                job_target_label: "Target Positions:",
-                job_add_role_btn: "+ Add Position",
-                job_title_ph: "Job Title (e.g. Software Engineer)",
-                job_desc_ph: "Job description (optional)...",
-                job_submit_btn: "Run Match Evaluation",
-                job_history_title: "2. Role Evaluation History Log",
-                job_clear_btn: "Clear History",
-                job_history_empty: "Submit your resume and target job titles to generate fit metrics and keyword gaps.",
-
-                copilot_col1_title: "1. Financial Assessment",
-                scenario_full: "Full Grant Profile",
-                scenario_partial: "Partial Grant Profile",
-                scenario_high: "Standard Profile",
-                scenario_incomplete: "Incomplete Profile",
-                copilot_notes_ph: "Enter household financial details...",
-                copilot_calc_btn: "Evaluate Eligibility",
-                copilot_whatif_title: "Adjust Metrics",
-                copilot_income_label: "Monthly Household Income (HKD):",
-                copilot_members_label: "Household Members:",
-                copilot_privacy_title: "2. Compliance & Privacy Audit",
-                copilot_protected_label: "Redacted Items:",
-                copilot_awaiting_input: "Awaiting input...",
-                copilot_result_title: "3. Evaluation Summary",
-                copilot_status_label: "Status:",
-                copilot_awaiting_badge: "AWAITING EVALUATION",
-                copilot_no_profile: "No profile evaluated",
-                copilot_calc_prompt: "Enter parameters above to view guidance.",
-                copilot_policy_label: "Policy Reference:",
-                copilot_checklist_label: "Required Verification Documents:",
-                copilot_checklist_awaiting: "• Awaiting evaluation",
-                copilot_appeal_title: "Special Circumstances Appeal",
-                copilot_appeal_desc: "Submit an exception request for officer review.",
-                copilot_appeal_default: "Select review reason...",
-                appeal_opt1: "Family Medical Emergency",
-                appeal_opt2: "Sudden Loss of Income Provider",
-                appeal_opt3: "Seasonal Income Discrepancy",
-                copilot_appeal_btn: "Submit Appeal Request",
-
-                bridge_title: "Financial Assistance & Work-Study Bridge",
-                bridge_subtitle: "Evaluate funding gaps and available work-study programs.",
-                bridge_income_label: "Monthly Income:",
-                bridge_tuition_label: "Tuition Cost:",
-                bridge_living_label: "Living Expenses:",
-                bridge_shortfall_title: "Financial Gap Summary",
-                bridge_shortfall_text: "Based on current inputs, calculated remaining shortfall:",
-                bridge_loan_status_label: "Loan Scheme Options:",
-                bridge_loan_eligible_badge: "NLSFT Eligible",
-                bridge_loan_desc: "You remain eligible to access government student loan schemes (NLSFT) to offset expenses.",
-                bridge_matched_jobs_title: "Campus & Work-Study Opportunities",
-                job_badge_flexible: "Part-Time",
-                job_badge_grant: "Work-Study",
-                bridge_job1_title: "AI Lab Student Assistant",
-                bridge_job1_desc: "Assist with basic Python data tasks and department script optimization.",
-                bridge_job2_title: "Financial Aid Ambassador",
-                bridge_job2_desc: "Help students navigate documentation requirements and submission checklists.",
-                bridge_apply_btn: "Apply"
+                godot_view_title: "Godot Web Game Sandbox",
+                godot_view_subtitle: "Play and test your exported Godot web build directly inside the platform.",
+                godot_reload_btn: "Reload Game",
+                godot_fs_btn: "Fullscreen"
             },
             "zh-tw": {
                 btn_career: "職涯教練",
@@ -853,6 +838,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 btn_copilot: "學生資助",
                 btn_bridge: "資助與就業橋樑",
                 btn_constellation: "技能星座圖",
+                btn_godotgame: "Godot 遊戲",
                 chat_history_title: "對話歷史",
                 new_chat_btn: "+ 新建",
                 upload_resume_title: "履歷內容",
@@ -869,22 +855,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_placeholder: "請輸入問題或選擇快捷模組...",
                 send_btn: "發送",
                 tip_enter: "按 Enter 發送，Shift + Enter 換行。",
-
-                job_view_title: "職位匹配與適配度分析",
-                job_view_subtitle: "根據您的履歷評估目標職位的匹配程度。",
-                job_col1_title: "1. 履歷與目標職位",
-                job_upload_label: "上傳履歷文件：",
-                job_upload_status: "附加履歷 (PDF/TXT)",
-                job_paste_label: "或貼上履歷內文：",
-                job_recommend_btn: "根據履歷推薦目標職位",
-                job_target_label: "目標職位：",
-                job_add_role_btn: "+ 新增職位",
-                job_title_ph: "職稱 (例如: 軟體工程師)",
-                job_desc_ph: "職缺描述 (選填)...",
-                job_submit_btn: "執行匹配評估",
-                job_history_title: "2. 評估歷史紀錄",
-                job_clear_btn: "清除歷史",
-                job_history_empty: "請提交履歷與目標職稱以產生匹配度與關鍵字落差分析。"
+                godot_view_title: "Godot 網頁遊戲沙盒",
+                godot_view_subtitle: "直接在平台內遊玩與測試您導出的 Godot 網頁版本。",
+                godot_reload_btn: "重新載入遊戲",
+                godot_fs_btn: "全螢幕"
             },
             "zh-cn": {
                 btn_career: "职涯教练",
@@ -892,6 +866,7 @@ UNIFIED_HTML_TEMPLATE = r"""
                 btn_copilot: "学生资助",
                 btn_bridge: "资助与就业桥梁",
                 btn_constellation: "技能星座图",
+                btn_godotgame: "Godot 游戏",
                 chat_history_title: "对话历史",
                 new_chat_btn: "+ 新建",
                 upload_resume_title: "简历内容",
@@ -908,22 +883,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                 chat_placeholder: "请输入问题或选择快捷模块...",
                 send_btn: "发送",
                 tip_enter: "按 Enter 发送，Shift + Enter 换行。",
-
-                job_view_title: "职位匹配与适配度分析",
-                job_view_subtitle: "根据您的简历评估目标职位的匹配程度。",
-                job_col1_title: "1. 简历与目标职位",
-                job_upload_label: "上传简历文件：",
-                job_upload_status: "附加简历 (PDF/TXT)",
-                job_paste_label: "或粘贴简历正文：",
-                job_recommend_btn: "根据简历推荐目标职位",
-                job_target_label: "目标职位：",
-                job_add_role_btn: "+ 新增职位",
-                job_title_ph: "职称 (例如: 软件工程师)",
-                job_desc_ph: "职位描述 (选填)...",
-                job_submit_btn: "执行匹配评估",
-                job_history_title: "2. 评估历史记录",
-                job_clear_btn: "清除历史",
-                job_history_empty: "请提交简历与目标职称以生成匹配度与关键词落差分析。"
+                godot_view_title: "Godot 网页游戏沙盒",
+                godot_view_subtitle: "直接在平台内游玩与测试您导出的 Godot 网页版本。",
+                godot_reload_btn: "重新加载游戏",
+                godot_fs_btn: "全屏幕"
             }
         };
 
@@ -1027,7 +990,6 @@ UNIFIED_HTML_TEMPLATE = r"""
             const listEl = document.getElementById('chat-history-list');
             if (!listEl) return;
             listEl.innerHTML = '';
-            // Newest chats on top
             const sortedChats = [...chats].reverse();
             sortedChats.forEach(chat => {
                 const isActive = chat.id === activeId;
@@ -1138,7 +1100,6 @@ UNIFIED_HTML_TEMPLATE = r"""
                 return alert("Text-to-speech is not supported in this browser.");
             }
             
-            // Clean markdown and special symbols to prevent unnatural pauses
             text = text
                 .replace(/###|\*\*|\*|__|_|`|#|>|\[.*?\]\(.*?\)/g, '')
                 .replace(/[-•]\s+/g, '. ')
@@ -1146,20 +1107,13 @@ UNIFIED_HTML_TEMPLATE = r"""
 
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
-            
             const voices = window.speechSynthesis.getVoices();
             const targetLang = currentLang === 'zh-tw' || currentLang === 'zh-cn' ? 'zh' : 'en';
-            
-            // Filter specifically for neural/enhanced local engines
             const preferredVoice = voices.find(v => v.lang.toLowerCase().startsWith(targetLang) && (v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Enhanced'))) || voices.find(v => v.lang.toLowerCase().startsWith(targetLang));
             
-            if (preferredVoice) {
-                utterance.voice = preferredVoice;
-            }
-            
+            if (preferredVoice) utterance.voice = preferredVoice;
             utterance.rate = 1.0; 
             utterance.pitch = 1.0; 
-            
             window.speechSynthesis.speak(utterance);
         }
 
@@ -1174,14 +1128,16 @@ UNIFIED_HTML_TEMPLATE = r"""
             const copilotView = document.getElementById('view-copilot');
             const bridgeView = document.getElementById('view-bridge');
             const constellationView = document.getElementById('view-constellation');
+            const godotView = document.getElementById('view-godotgame');
 
             const btnCareer = document.getElementById('btn-career');
             const btnJob = document.getElementById('btn-job');
             const btnCopilot = document.getElementById('btn-copilot');
             const btnBridge = document.getElementById('btn-bridge');
             const btnConstellation = document.getElementById('btn-constellation');
+            const btnGodot = document.getElementById('btn-godotgame');
 
-            [btnCareer, btnJob, btnCopilot, btnBridge, btnConstellation].forEach(btn => {
+            [btnCareer, btnJob, btnCopilot, btnBridge, btnConstellation, btnGodot].forEach(btn => {
                 if (btn) btn.className = "text-xs font-medium px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition";
             });
 
@@ -1190,6 +1146,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             copilotView.classList.add('hidden');
             bridgeView.classList.add('hidden');
             constellationView.classList.add('hidden');
+            godotView.classList.add('hidden');
 
             if (mode === 'career') {
                 careerView.classList.remove('hidden');
@@ -1207,19 +1164,41 @@ UNIFIED_HTML_TEMPLATE = r"""
                 constellationView.classList.remove('hidden');
                 if (btnConstellation) btnConstellation.className = "text-xs font-medium px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm transition";
                 setTimeout(() => { resizeConstellationCanvas(); }, 50);
+            } else if (mode === 'godotgame') {
+                godotView.classList.remove('hidden');
+                if (btnGodot) btnGodot.className = "text-xs font-medium px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm transition";
+            }
+        }
+
+        function reloadGodotGame() {
+            const iframe = document.getElementById('godot-iframe');
+            if (iframe) iframe.src = iframe.src;
+        }
+
+        function toggleGodotFullscreen() {
+            const iframe = document.getElementById('godot-iframe');
+            if (!document.fullscreenElement) {
+                if (iframe.requestFullscreen) {
+                    iframe.requestFullscreen();
+                } else if (iframe.webkitRequestFullscreen) {
+                    iframe.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
             }
         }
 
         function launchConstellationFromJob(jobTitle) {
             const cvText = document.getElementById('job-cv-text').value.trim() || uploadedResumeText;
-            
             if (!cvText) {
                 return alert("Please upload or enter a CV before mapping the constellation.");
             }
-
             document.getElementById('constellation-cv').value = cvText;
             document.getElementById('constellation-job').value = jobTitle;
-
             switchView('constellation');
             generateNewConstellation();
         }
@@ -1230,7 +1209,7 @@ UNIFIED_HTML_TEMPLATE = r"""
         }
 
         // ==============================================================================
-        // DYNAMIC CONSTELLATION ENGINE LOGIC WITH DEVICE LOCALSTORAGE PERSISTENCE
+        // DYNAMIC CONSTELLATION ENGINE LOGIC
         // ==============================================================================
         let cCanvas, cCtx;
         let cWidth, cHeight;
@@ -1248,12 +1227,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                 const saved = localStorage.getItem('boussole_constellation_history');
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed)) {
-                        constellationHistory = parsed;
-                    }
+                    if (Array.isArray(parsed)) constellationHistory = parsed;
                 }
             } catch (e) {
-                console.error("Error loading constellation history from localStorage:", e);
+                console.error("Error loading constellation history:", e);
             }
             renderConstellationHistory();
         }
@@ -1262,7 +1239,7 @@ UNIFIED_HTML_TEMPLATE = r"""
             try {
                 localStorage.setItem('boussole_constellation_history', JSON.stringify(constellationHistory));
             } catch (e) {
-                console.error("Error saving constellation history to localStorage:", e);
+                console.error("Error saving constellation history:", e);
             }
         }
 
@@ -1463,7 +1440,6 @@ UNIFIED_HTML_TEMPLATE = r"""
             cCtx.clearRect(0, 0, cWidth, cHeight);
             const centerX = cWidth / 2 + cameraOffset.x;
             const centerY = cHeight / 2 + cameraOffset.y;
-
             const isDark = document.documentElement.classList.contains('dark');
 
             if (showBeams) {
@@ -1524,7 +1500,6 @@ UNIFIED_HTML_TEMPLATE = r"""
                 cCtx.font = '10px Inter, sans-serif';
                 const lines = wrapCanvasText(cCtx, node.title, 110);
                 const lineHeight = 12;
-
                 const labelOffsetY = node.y < 0 ? -(node.r + 8 + (lines.length * lineHeight)) : (node.r + 14);
 
                 lines.forEach((line, index) => {
@@ -1577,11 +1552,7 @@ UNIFIED_HTML_TEMPLATE = r"""
 
         function toggleQuestStatus() {
             if (!selectedNode) return;
-            if (selectedNode.status === 'unlocked') {
-                selectedNode.status = 'locked';
-            } else {
-                selectedNode.status = 'unlocked';
-            }
+            selectedNode.status = (selectedNode.status === 'unlocked') ? 'locked' : 'unlocked';
             showNodeModal(selectedNode);
             drawConstellation();
         }
@@ -1723,14 +1694,10 @@ UNIFIED_HTML_TEMPLATE = r"""
                 (data.results || []).forEach((resItem, idx) => {
                     const escapedTitle = (resItem.title || 'Role').replace(/'/g, "\\'");
                     const accId = `acc-${runId}-${idx}`;
-
                     const score = resItem.score || 0;
                     let badgeColorClass = 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300';
-                    if (score >= 70) {
-                        badgeColorClass = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300';
-                    } else if (score <= 30) {
-                        badgeColorClass = 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300';
-                    }
+                    if (score >= 70) badgeColorClass = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300';
+                    else if (score <= 30) badgeColorClass = 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300';
 
                     const goodSkillsList = (resItem.good_skills || []).map(s => 
                         `<li class="text-[11px] text-emerald-800 dark:text-emerald-300">• <strong class="font-semibold text-emerald-900 dark:text-emerald-200">${s.skill || 'Matched Skill'}:</strong> ${s.reason || 'Proven alignment.'}</li>`
@@ -1822,7 +1789,6 @@ UNIFIED_HTML_TEMPLATE = r"""
                 </div>`;
 
             chatStream.scrollTop = chatStream.scrollHeight;
-
             window.activeStreams[activeChatId] = { msgId, buffer: '', isDone: false };
 
             try {
@@ -1873,7 +1839,6 @@ UNIFIED_HTML_TEMPLATE = r"""
             window.location.href = '/api/chats/export';
         }
 
-        // Student Financial Aid Copilot Logic
         function loadScenario(type, income, members) {
             const notes = document.getElementById('case-notes');
             if (income !== null) {
@@ -1922,7 +1887,6 @@ UNIFIED_HTML_TEMPLATE = r"""
             });
 
             const data = await res.json();
-            
             document.getElementById('pii-status').classList.remove('hidden');
             document.getElementById('pii-count').innerText = data.sanitized_count;
             document.getElementById('sanitized-text').innerText = data.sanitized_text;
@@ -2030,7 +1994,6 @@ def index():
 
 @app.route('/api/generate_constellation', methods=['POST'])
 def generate_constellation():
-    """Dynamically generates an intricate RPG skill constellation graph (15+ nodes) in 1 single OpenAI request."""
     data = request.get_json() or {}
     cv_text = data.get('cv_text', '')
     job_title = data.get('job_title', '')
@@ -2143,7 +2106,6 @@ def delete_active_chat():
         del sessions[active_id]
         remaining_keys = list(sessions.keys())
         
-        # Navigate up if possible, else down, else create new
         if idx > 0 and (idx - 1) < len(remaining_keys):
             active_id = remaining_keys[idx - 1]
         elif remaining_keys:
@@ -2249,8 +2211,8 @@ def suggest_jobs():
     cv_text = data.get('cv_text', '')
     
     prompt = f"""
-    Analyze this resume thoroughly. Suggest 5 highly specific and tailored target job roles (avoid generic titles like 'Software Engineer' or 'Data Analyst' unless qualified with seniority and domain, e.g., 'Senior Full-Stack Python/React Engineer' or 'Machine Learning Infrastructure Engineer'). 
-    For each role, provide the specific title and a detailed 2-3 sentence description outlining key responsibilities, expected tech stacks, and domain alignment based on the candidate's background. 
+    Analyze this resume thoroughly. Suggest 5 highly specific and tailored target job roles.
+    For each role, provide the specific title and a detailed 2-3 sentence description. 
     Return raw JSON format like: [{{"title": "...", "description": "..."}}]
 
     Resume:
@@ -2280,7 +2242,6 @@ def suggest_jobs():
 
 @app.route('/api/match_jobs', methods=['POST'])
 def match_jobs():
-    """Optimized batch endpoint evaluating all roles in a single LLM API call."""
     data = request.get_json() or {}
     cv_text = data.get('cv_text', '')
     target_jobs = data.get('target_jobs', [])
