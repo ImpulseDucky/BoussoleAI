@@ -2,7 +2,7 @@
   "sessions": {
     "chat_1791509300": {
       "id": "chat_1791509300",
-      "title": "New Conversation",
+      "title": "hi",
       "messages": [
         {
           "role": "system",
@@ -11,6 +11,14 @@
         {
           "role": "assistant",
           "content": "Welcome to BoussoleAI Career Strategist. How can I help you navigate your professional trajectory today?"
+        },
+        {
+          "role": "user",
+          "content": "hi"
+        },
+        {
+          "role": "assistant",
+          "content": "- Hi — Boussole AI here. How can I help with your resume, interview prep, or career plan?"
         }
       ]
     }

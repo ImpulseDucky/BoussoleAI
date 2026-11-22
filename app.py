@@ -16,11 +16,22 @@ load_dotenv(env_path)
 endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
 api_key = os.environ.get('AZURE_OPENAI_API_KEY')
 deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-5-mini')
-APP_PASSWORD = os.environ.get('APP_PASSWORD', 'boussole2026')
+APP_PASSWORD = os.environ.get('APP_PASSWORD')
 
 if not endpoint or not api_key:
     raise RuntimeError(
         f"Missing Azure OpenAI credentials. Check your .env file at: {env_path}"
+    )
+
+if not APP_PASSWORD:
+    raise RuntimeError(
+        f"Missing APP_PASSWORD. Set it in your .env file at: {env_path}"
+    )
+
+FLASK_SECRET_KEY = os.environ.get('FLASK_SECRET_KEY')
+if not FLASK_SECRET_KEY:
+    raise RuntimeError(
+        f"Missing FLASK_SECRET_KEY. Set it in your .env file at: {env_path}"
     )
 
 # Initialize standard OpenAI client pointing to Azure AI Foundry base_url
@@ -31,7 +42,7 @@ client = OpenAI(
 
 # SINGLE app initialization here:
 app = Flask(__name__)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'boussole-ai-super-secret-key-2026')
+app.secret_key = FLASK_SECRET_KEY
 
 # Define an absolute path to your game folder next to app.py
 GAME_FOLDER = Path(__file__).resolve().parent / 'boussole'
